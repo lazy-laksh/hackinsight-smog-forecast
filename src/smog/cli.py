@@ -12,7 +12,7 @@ import sys
 import time
 from typing import Callable, Optional
 
-from smog import config, manifest
+from smog import clean, config, fetch_firms, fetch_openaq, fetch_openmeteo, gold, manifest, quality
 
 # --- Stages ------------------------------------------------------------------
 # Each stage is a function that returns a one-line summary, or raises an error.
@@ -40,14 +40,13 @@ def stage_verify_raw() -> str:
 
 STAGES: list[tuple[str, Optional[Callable[[], str]]]] = [
     ("Prepare folders", stage_prepare_folders),
-    ("Fetch OpenAQ sensors (raw)", None),
-    ("Fetch NASA FIRMS fires (raw)", None),
-    ("Fetch Open-Meteo weather (raw)", None),
-    ("Fetch Open-Meteo CAMS air quality (raw)", None),
+    ("Fetch OpenAQ sensors (raw)", fetch_openaq.run),
+    ("Fetch NASA FIRMS fires (raw)", fetch_firms.run),
+    ("Fetch Open-Meteo weather + CAMS (raw)", fetch_openmeteo.run),
     ("Verify raw files against manifest", stage_verify_raw),
-    ("Build cleaned layer", None),
-    ("Build gold layer", None),
-    ("Run Data Quality Agent", None),
+    ("Build cleaned layer", clean.run),
+    ("Data Quality Agent: gates 1 + 2 (fix / fill / flag, logged)", quality.run),
+    ("Build gold layer", gold.run),
 ]
 
 
@@ -95,12 +94,62 @@ def run_clean() -> int:
     return 0
 
 
+def run_fetch_openaq(city: str | None, max_locations: int | None, retry_gaps: bool) -> int:
+    """Download OpenAQ only (optionally a small piece of it, for testing)."""
+    config.ensure_folders()
+    print(fetch_openaq.run(city_ids=[city] if city else None, max_locations=max_locations,
+                           retry_gaps=retry_gaps))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="smog", description="Smog forecasting pipeline")
-    parser.add_argument("command", choices=["data", "clean"])
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("data", help="run the whole pipeline (what `make data` does)")
+    sub.add_parser("clean", help="delete generated data, keep manifest.csv")
+    quick = sub.add_parser("fetch-openaq", help="download OpenAQ data only (for testing)")
+    quick.add_argument("--city", choices=sorted(config.cities()), help="only this city")
+    quick.add_argument("--max-locations", type=int, help="only the first N sensors per city")
+    quick.add_argument("--retry-gaps", action="store_true",
+                       help="also retry months listed in data/logs/openaq_known_gaps.csv")
+    sub.add_parser("fetch-firms", help="download NASA FIRMS fires only")
+    sub.add_parser("fetch-openmeteo", help="download Open-Meteo weather + CAMS only")
+    sub.add_parser("build-cleaned", help="rebuild the cleaned layer from data/raw only")
+    sub.add_parser("profile", help="print a read-only profile of the cleaned tables")
+    sub.add_parser("quality", help="run the Data Quality Agent on the cleaned layer")
+    sub.add_parser("build-gold", help="rebuild the gold layer from the quality-checked data")
     args = parser.parse_args(argv)
+
     if args.command == "data":
         return run_data()
+    if args.command == "fetch-openaq":
+        return run_fetch_openaq(args.city, args.max_locations, args.retry_gaps)
+    if args.command == "fetch-firms":
+        config.ensure_folders()
+        print(fetch_firms.run())
+        return 0
+    if args.command == "fetch-openmeteo":
+        config.ensure_folders()
+        print(fetch_openmeteo.run())
+        return 0
+    if args.command == "build-cleaned":
+        config.ensure_folders()
+        print(clean.run())
+        return 0
+    if args.command == "profile":
+        from smog import profile
+        profile.run()
+        return 0
+    if args.command == "quality":
+        try:
+            print(quality.run())
+        except quality.QualityGateFailed as failed:
+            print(failed)
+            return 1
+        return 0
+    if args.command == "build-gold":
+        print(gold.run())
+        return 0
     return run_clean()
 
 
