@@ -1,0 +1,11 @@
+# Core libraries for the data pipeline.
+# After installing, run:  pip freeze > requirements.lock
+# and commit requirements.lock so anyone can rebuild with the exact same versions.
+requests>=2.31
+python-dotenv>=1.0
+PyYAML>=6.0
+pandas>=2.2
+pyarrow>=15.0
+duckdb>=1.0
+pandera>=0.20
+pytest>=8.0

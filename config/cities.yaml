@@ -1,0 +1,40 @@
+# Cities we forecast for.
+# lat/lon is the city centre; radius_m is how far around it we look for sensors.
+# OpenAQ allows a radius of at most 25,000 m in one query.
+cities:
+  lahore:
+    name: Lahore
+    lat: 31.5204
+    lon: 74.3587
+    radius_m: 25000
+  islamabad_rawalpindi:
+    name: Islamabad / Rawalpindi
+    lat: 33.6400
+    lon: 73.0700
+    radius_m: 25000
+  karachi:
+    name: Karachi
+    lat: 24.8607
+    lon: 67.0011
+    radius_m: 25000
+  peshawar:
+    name: Peshawar
+    lat: 34.0151
+    lon: 71.5249
+    radius_m: 25000
+
+# Box for NASA FIRMS fire detections: west, south, east, north (degrees).
+# Covers Sindh, Pakistani Punjab, Khyber Pakhtunkhwa, Islamabad and Indian Punjab,
+# because smoke from fires across the border also reaches Lahore.
+firms_bbox:
+  west: 66.0
+  south: 24.0
+  east: 78.0
+  north: 36.0
+
+# First day of data we ask for (most sensors start around June 2025).
+history_start: "2025-06-01"
+
+# Time zone used only for display and for defining a "day" for the target.
+# All stored timestamps are UTC.
+display_timezone: Asia/Karachi

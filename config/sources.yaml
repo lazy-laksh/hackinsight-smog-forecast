@@ -1,0 +1,26 @@
+# One entry per data source. The manifest copies the licence and publisher
+# from here, so they only need to be written once.
+sources:
+  openaq:
+    publisher: "OpenAQ (data owners recorded per location, e.g. The Urban Unit)"
+    url: "https://api.openaq.org/v3"
+    licence: "Per location (recorded in each manifest row); mostly CC BY 4.0"
+    attribution: "Data from OpenAQ and the original owner of each location"
+  firms:
+    publisher: "NASA ESDIS / LANCE - Fire Information for Resource Management System"
+    url: "https://firms.modaps.eosdis.nasa.gov/api/"
+    licence: "NASA open data policy"
+    attribution: >-
+      We acknowledge the use of data and/or imagery from NASA's Fire Information
+      for Resource Management System (FIRMS), part of NASA's Earth Science Data
+      and Information System (ESDIS).
+  openmeteo_weather:
+    publisher: "Open-Meteo (ECMWF ERA5 / IFS reanalysis)"
+    url: "https://archive-api.open-meteo.com/v1/archive"
+    licence: "CC BY 4.0"
+    attribution: "Weather data by Open-Meteo.com"
+  openmeteo_air:
+    publisher: "Copernicus Atmosphere Monitoring Service (CAMS), via Open-Meteo"
+    url: "https://air-quality-api.open-meteo.com/v1/air-quality"
+    licence: "CC BY 4.0"
+    attribution: "Air quality model data: CAMS, served by Open-Meteo.com"
