@@ -10,3 +10,4 @@ duckdb>=1.0
 pandera>=0.20
 pytest>=8.0
 pytz>=2024.1      # DuckDB needs it to hand back single UTC timestamps to Python
+prefect>=3.8         # hourly scheduler (only needed on the computer that runs the schedule)

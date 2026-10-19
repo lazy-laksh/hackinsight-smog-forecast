@@ -118,6 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("profile", help="print a read-only profile of the cleaned tables")
     sub.add_parser("quality", help="run the Data Quality Agent on the cleaned layer")
     sub.add_parser("build-gold", help="rebuild the gold layer from the quality-checked data")
+    sub.add_parser("verify", help="check every raw file against its SHA-256 in manifest.csv")
+    export = sub.add_parser("export-runs", help="write Prefect run history to prefect_runs.csv")
+    export.add_argument("--start", default="2026-10-20T16:00:00+05:00", help="ISO time, e.g. 2026-10-20T16:00:00+05:00")
+    export.add_argument("--end", default="2026-10-21T16:00:00+05:00")
     args = parser.parse_args(argv)
 
     if args.command == "data":
@@ -149,6 +153,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "build-gold":
         print(gold.run())
+        return 0
+    if args.command == "verify":
+        try:
+            print(stage_verify_raw())
+        except RuntimeError as problem:
+            print(f"FAILED: {problem}")
+            return 1
+        return 0
+    if args.command == "export-runs":
+        from datetime import datetime
+        from smog import export_runs
+        print(export_runs.export(datetime.fromisoformat(args.start), datetime.fromisoformat(args.end)))
         return 0
     return run_clean()
 

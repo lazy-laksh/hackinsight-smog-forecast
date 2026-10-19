@@ -5,12 +5,13 @@
 PYTHON ?= python
 export PYTHONPATH := src
 
-.PHONY: data clean test help
+.PHONY: data clean test help schedule
 
 help:
 	@echo "make data   - fetch raw files, verify them, build cleaned + gold tables, run quality checks"
 	@echo "make clean  - delete everything under data/ except manifest.csv"
 	@echo "make test   - run the unit tests"
+	@echo "make schedule - start the hourly Prefect schedule (keep it running)"
 
 data:
 	$(PYTHON) -m smog data
@@ -20,3 +21,6 @@ clean:
 
 test:
 	$(PYTHON) -m pytest -q
+
+schedule:
+	$(PYTHON) -m smog.flow
