@@ -88,6 +88,11 @@ def build_gold() -> str:
     return smog("build-gold")
 
 
+@task(name="forecast tomorrow (per city)")
+def forecast() -> str:
+    return smog("predict")
+
+
 def write_status(status: str, started: datetime, steps: dict) -> None:
     """Small JSON file the dashboard reads to show the last run and the last successful run."""
     path = config.ROOT / STATUS_FILE
@@ -117,7 +122,8 @@ def hourly() -> dict:
     # 2. Everything after the downloads must succeed, in order.
     try:
         for name, step in (("verify", verify), ("cleaned", build_cleaned),
-                           ("quality", quality), ("gold", build_gold)):
+                           ("quality", quality), ("gold", build_gold),
+                           ("forecast", forecast)):
             steps[name] = step()
     except Exception as error:
         steps["error"] = str(error)
@@ -136,4 +142,4 @@ def hourly() -> dict:
 if __name__ == "__main__":
     # limit=1: never start a new run while the previous one is still going.
     hourly.serve(name="smog-hourly", cron=SCHEDULE, limit=1,
-                 description="Hourly: fetch -> verify -> clean -> quality gates -> gold")
+                 description="Hourly: fetch -> verify -> clean -> quality gates -> gold -> forecast")

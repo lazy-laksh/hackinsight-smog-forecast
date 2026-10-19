@@ -1,0 +1,9 @@
+city,season,days,model_mae,baseline_mae,improvement_pct
+islamabad_rawalpindi,rest of year (Mar-Sep),214,6.08,7.55,19.5
+islamabad_rawalpindi,smog season (Oct-Feb),151,15.51,15.26,-1.6
+karachi,rest of year (Mar-Sep),214,2.92,3.73,21.7
+karachi,smog season (Oct-Feb),150,13.08,17.71,26.1
+lahore,rest of year (Mar-Sep),214,10.77,14.44,25.4
+lahore,smog season (Oct-Feb),151,41.7,27.34,-52.5
+peshawar,rest of year (Mar-Sep),214,8.6,11.43,24.8
+peshawar,smog season (Oct-Feb),150,38.19,37.03,-3.1

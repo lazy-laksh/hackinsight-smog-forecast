@@ -119,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("quality", help="run the Data Quality Agent on the cleaned layer")
     sub.add_parser("build-gold", help="rebuild the gold layer from the quality-checked data")
     sub.add_parser("verify", help="check every raw file against its SHA-256 in manifest.csv")
+    sub.add_parser("train", help="train the forecast model, score it on the test set, write reports/")
+    sub.add_parser("predict", help="forecast tomorrow for each city and add it to gold.predictions")
     export = sub.add_parser("export-runs", help="write Prefect run history to prefect_runs.csv")
     export.add_argument("--start", default="2026-10-20T16:00:00+05:00", help="ISO time, e.g. 2026-10-20T16:00:00+05:00")
     export.add_argument("--end", default="2026-10-21T16:00:00+05:00")
@@ -153,6 +155,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "build-gold":
         print(gold.run())
+        return 0
+    if args.command == "train":
+        from smog import model
+        print(model.train())
+        return 0
+    if args.command == "predict":
+        try:
+            from smog import model
+        except ImportError as missing:
+            # Never turn an hourly run red because a package was not installed yet.
+            print(f"SKIPPED: {missing.name} is not installed here (run `pip install -r requirements.txt`)")
+            return 0
+        print(model.predict())
         return 0
     if args.command == "verify":
         try:

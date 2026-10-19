@@ -45,7 +45,7 @@ def test_all_steps_run_in_order(fake_smog, tmp_path):
     calls, _ = fake_smog
     steps = hourly_flow.hourly()
     assert calls == ["fetch-openaq", "fetch-firms", "fetch-openmeteo", "verify",
-                     "build-cleaned", "quality", "build-gold"]
+                     "build-cleaned", "quality", "build-gold", "predict"]
     assert steps["gold"] == "build-gold ok"
     s = status(tmp_path)
     assert s["last_run"]["status"] == "success" and s["last_success"] == s["last_run"]

@@ -1,0 +1,5 @@
+city,days,model_mae,baseline_mae,improvement_pct,model_bias,interval_coverage
+islamabad_rawalpindi,19,6.53,10.7,39.0,-0.15,0.89
+karachi,19,4.45,4.16,-7.0,0.32,0.89
+lahore,19,12.52,14.56,14.0,-2.97,0.89
+peshawar,19,12.1,14.19,14.7,3.51,0.95

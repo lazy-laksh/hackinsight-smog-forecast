@@ -1,0 +1,118 @@
+{
+  "trained_at_utc": "2026-10-19T20:23:16+00:00",
+  "chosen_settings": "small",
+  "settings": {
+    "max_iter": 300,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 20,
+    "l2_regularization": 1.0
+  },
+  "rolling_origin_mae": {
+    "small": 15.36,
+    "medium": 16.1
+  },
+  "train_rows": 1922,
+  "test_rows": 76,
+  "train_target_days": [
+    "2025-06-02",
+    "2026-09-30"
+  ],
+  "test_target_days": [
+    "2026-10-01",
+    "2026-10-19"
+  ],
+  "test": {
+    "model": {
+      "mae": 8.9,
+      "rmse": 11.39,
+      "bias": 0.18,
+      "n": 76
+    },
+    "baseline_same_info": {
+      "mae": 10.9,
+      "rmse": 15.04,
+      "bias": -3.49,
+      "n": 76
+    },
+    "baseline_full_day": {
+      "mae": 9.8,
+      "rmse": 13.17,
+      "bias": -1.13,
+      "n": 76
+    },
+    "model_without_tomorrow_inputs": {
+      "mae": 10.18,
+      "rmse": 13.31,
+      "bias": 1.77,
+      "n": 76
+    },
+    "improvement_without_tomorrow_inputs_pct": 6.6,
+    "improvement_vs_baseline_pct": 18.3,
+    "improvement_vs_full_day_baseline_pct": 9.2,
+    "unhealthy_model": {
+      "accuracy": 0.908,
+      "recall_unhealthy_days": 0.921,
+      "precision_unhealthy_days": 0.897,
+      "unhealthy_days": 38
+    },
+    "unhealthy_baseline": {
+      "accuracy": 0.763,
+      "recall_unhealthy_days": 0.711,
+      "precision_unhealthy_days": 0.794,
+      "unhealthy_days": 38
+    },
+    "interval_80_coverage": 0.908,
+    "interval_80_mean_width": 36.9,
+    "interval_80_coverage_before_calibration": 0.645,
+    "interval_80_mean_width_before_calibration": 25.6
+  },
+  "interval_calibration": {
+    "method": "conformalized quantile regression on rolling-origin validation months",
+    "widening_ugm3": 5.66,
+    "validation_coverage_before": 0.591,
+    "validation_coverage_after": 0.801,
+    "validation_days": 1458
+  },
+  "declared_success": {
+    "rule": "at least 10% lower MAE than persistence, overall and for Lahore",
+    "overall_met": true,
+    "lahore_met": true
+  },
+  "features": [
+    "pm_sofar_today",
+    "pm_evening_today",
+    "hours_sofar_today",
+    "pm_yesterday",
+    "pm_2days_ago",
+    "pm_max_hour_yesterday",
+    "pm_mean_last7",
+    "temp_mean_today",
+    "temp_mean_tomorrow",
+    "rh_mean_today",
+    "rh_mean_tomorrow",
+    "wind_mean_kmh_today",
+    "wind_mean_kmh_tomorrow",
+    "blh_mean_m_today",
+    "blh_mean_m_tomorrow",
+    "blh_min_m_today",
+    "blh_min_m_tomorrow",
+    "precip_sum_mm_today",
+    "precip_sum_mm_tomorrow",
+    "wind_dir_sin_tomorrow",
+    "wind_dir_cos_tomorrow",
+    "fires_300km_today",
+    "fires_100km_today",
+    "frp_300km_today",
+    "fires_300km_last3",
+    "cams_pm25_today",
+    "cams_pm25_tomorrow",
+    "season_sin",
+    "season_cos",
+    "weekday_tomorrow",
+    "city_islamabad_rawalpindi",
+    "city_karachi",
+    "city_lahore",
+    "city_peshawar"
+  ]
+}
