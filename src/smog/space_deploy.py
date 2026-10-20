@@ -1,15 +1,21 @@
 """Create or update the Hugging Face Space that shows the dashboard.
 
-Run once from the main laptop (HF_TOKEN in .env):  python -m smog deploy-space
-It uploads the files in space/ and tells the Space which dataset to read
-(the one `python -m smog publish` updates every hour on the Dell).
+Run from the main laptop (HF_TOKEN in .env):  python -m smog deploy-space
+It uploads space_static/ as a free *static* Space (plain HTML + JavaScript). The page reads the
+public dataset that `python -m smog publish` updates every hour on the Dell, directly in the
+visitor's browser, so the Space itself never needs a server, a secret or a restart.
 """
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
+from pathlib import Path
 
 from smog import config
 from smog.publish import DEFAULT_REPO_NAME
+
+PLACEHOLDER = "__DATA_REPO__"
 
 
 def run(name: str) -> str:
@@ -23,12 +29,12 @@ def run(name: str) -> str:
     user = api.whoami()["name"]
     space_id = f"{user}/{name}"
     data_repo = os.getenv("HF_DATASET_REPO") or f"{user}/{DEFAULT_REPO_NAME}"
-    api.create_repo(space_id, repo_type="space", space_sdk="gradio", exist_ok=True, private=False)
-    api.add_space_variable(space_id, "DATA_REPO", data_repo)
-    groq = os.getenv("GROQ_API_KEY")
-    if groq:                                   # stored as a Space *secret*: never visible in the code or logs
-        api.add_space_secret(space_id, "GROQ_API_KEY", groq)
-    api.upload_folder(folder_path=str(config.ROOT / "space"), repo_id=space_id, repo_type="space",
-                      commit_message="update dashboard")
-    return (f"Space ready: https://huggingface.co/spaces/{space_id} (reads datasets/{data_repo}"
-            f"{'; Groq key stored as a Space secret' if groq else ''}). It takes 1-3 minutes to build.")
+    with tempfile.TemporaryDirectory() as tmp:
+        site = Path(tmp) / "site"
+        shutil.copytree(config.ROOT / "space_static", site)
+        page = site / "index.html"
+        page.write_text(page.read_text(encoding="utf-8").replace(PLACEHOLDER, data_repo), encoding="utf-8")
+        api.create_repo(space_id, repo_type="space", space_sdk="static", exist_ok=True, private=False)
+        api.upload_folder(folder_path=str(site), repo_id=space_id, repo_type="space", commit_message="update dashboard")
+    return (f"Space ready: https://huggingface.co/spaces/{space_id} (a static page reading datasets/{data_repo}). "
+            "Give it a minute, then refresh.")

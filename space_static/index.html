@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pakistan Smog Forecast</title>
+<!--
+  Static dashboard (free Hugging Face "static" Space). It reads the small files that the hourly
+  pipeline publishes to a public Hugging Face dataset (src/smog/publish.py) and draws everything in
+  the browser. Every number comes from those published gold rows and reports; nothing is typed here.
+  Local test: python -m http.server, then open index.html?data=<folder with the published files>/
+-->
+<!-- Libraries are bundled in lib/ (PapaParse 5.4.1, Plotly 2.35.2, marked 12.0.2, all MIT) so the page has no CDN dependency. -->
+<script src="lib/papaparse.min.js"></script>
+<script src="lib/plotly.min.js"></script>
+<script src="lib/marked.min.js"></script>
+<style>
+:root{--bg:#f8fafc;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--ok-bg:#dcfce7;--ok:#14532d;
+--bad-bg:#fee2e2;--bad:#7f1d1d;--accent:#0e7490}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1120;--card:#111827;--ink:#e5e7eb;
+--muted:#94a3b8;--line:#1f2937;--ok-bg:#14532d;--ok:#dcfce7;--bad-bg:#7f1d1d;--bad:#fee2e2;--accent:#22d3ee}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:28px;margin:0 0 6px}h2{font-size:19px;margin:26px 0 8px}h3{font-size:16px;margin:18px 0 6px}
+p{margin:6px 0}.muted{color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.chip{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600}
+.ok{background:var(--ok-bg);color:var(--ok)}.bad{background:var(--bad-bg);color:var(--bad)}
+.banner{padding:10px 14px;border-radius:10px;font-weight:600;margin:10px 0}
+.controls{display:flex;flex-wrap:wrap;gap:18px;align-items:center;background:var(--card);border:1px solid var(--line);
+border-radius:12px;padding:12px 14px;margin:10px 0}
+.controls label{font-weight:600;font-size:14px}.controls input[type=range]{width:220px;vertical-align:middle}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:16px;overflow-x:auto}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tabs button.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:700}
+.tab{display:none}.tab.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:10px}
+.card{background:var(--card);border:1px solid var(--line);border-top:6px solid;border-radius:14px;padding:14px}
+.city{font-size:18px;font-weight:700}.num{font-size:40px;font-weight:800;line-height:1.1}.num small{font-size:14px;font-weight:500}
+.advice{margin-top:10px;padding:8px;border-radius:8px;font-weight:700;text-align:center}
+.why{font-size:13px;margin-top:8px}.why ul{margin:4px 0 0 18px;padding:0}
+.src{font-size:11px;color:var(--muted);margin-top:8px;word-break:break-all}
+.plot{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:12px;min-height:360px}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--card)}
+textarea{width:100%;min-height:200px;font:15px/1.7 system-ui;border-radius:10px;border:1px solid var(--line);padding:10px;background:var(--card);color:var(--ink)}
+button.small{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+select{padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.md{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 18px}
+.md table{font-size:12px}
+[dir=rtl]{text-align:right}
+</style>
+</head>
+<body>
+<main>
+  <h1>Next-day smog forecast for Pakistan</h1>
+  <p>Tomorrow's average PM2.5 for <b>Lahore, Islamabad/Rawalpindi, Peshawar and Karachi</b>, updated every hour from
+  OpenAQ sensors, NASA FIRMS fires, Open-Meteo weather and CAMS. Built for an environment officer deciding
+  <b>the evening before</b> whether to issue a smog advisory.
+  <i class="muted">Information only, not medical advice: follow official advisories (Punjab EPA, PDMA, PMD).</i></p>
+
+  <div id="banner"></div>
+  <div class="chips" id="chips"><span class="chip">Loading…</span></div>
+
+  <div class="controls">
+    <div><label for="r">How many times worse is a <u>missed</u> smog day than a false alarm? R = <span id="rv">3</span></label><br>
+      <input id="r" type="range" min="1" max="10" step="0.5" value="3">
+      <span class="muted">Advisory when chance of unhealthy ≥ 1/(1+R) = <b id="thr">25%</b></span></div>
+    <div><label>Language / زبان</label><br>
+      <label><input type="radio" name="lang" value="en" checked> English</label>
+      <label><input type="radio" name="lang" value="ur"> اردو</label></div>
+    <button class="small" id="refresh">Refresh data</button>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="t-tomorrow" class="active">Tomorrow</button>
+    <button data-tab="t-report">Report card</button>
+    <button data-tab="t-rule">Advisory rule</button>
+    <button data-tab="t-quality">Data quality</button>
+    <button data-tab="t-model">Model card</button>
+    <button data-tab="t-about">About the data</button>
+  </nav>
+
+  <section class="tab active" id="t-tomorrow">
+    <div id="cards"></div>
+    <div class="plot" id="p-evolution"></div>
+    <h3>Urdu advisory text (copy and forward)</h3>
+    <textarea id="bulletin" dir="rtl" readonly></textarea>
+    <button class="small" id="copy">Copy</button>
+  </section>
+
+  <section class="tab" id="t-report">
+    <h2>Live: our evening forecast vs what really happened</h2>
+    <p class="muted">Each day is scored with the forecast issued around <b>20:05 PKT the evening before</b> (the time the
+    model was trained for). <i>so far today</i> = the day is not finished yet.</p>
+    <label>City <select id="city"></select></label>
+    <div class="plot" id="p-history"></div>
+    <div class="tablewrap" id="score"></div>
+    <h2>Back-test on the locked test month</h2>
+    <p id="headline"></p>
+    <div class="plot" id="p-backtest"></div>
+    <div class="tablewrap" id="errors"></div>
+  </section>
+
+  <section class="tab" id="t-rule">
+    <h2>Would the advisory rule have worked?</h2>
+    <p class="muted">Replayed on past days the model never trained on. Move R above to see the trade-off between
+    missed smog days and false alarms. Cost = 1 per false alarm + R per missed unhealthy day.</p>
+    <div class="tablewrap" id="replay"></div>
+    <div class="plot" id="p-reliability"></div>
+  </section>
+
+  <section class="tab" id="t-quality">
+    <h2>Quality gates (latest runs)</h2>
+    <p class="muted">Gate 1 = schema checks; Gate 2 = freshness and completeness. If a gate fails, gold tables and
+    forecasts are not rebuilt and this page keeps the last good results.</p>
+    <div class="tablewrap" id="gates"></div>
+    <h2>What the Data Quality Agent did in the latest run, and why</h2>
+    <div class="tablewrap" id="decisions"></div>
+    <h2>Source freshness (age computed live in your browser)</h2>
+    <div class="tablewrap" id="fresh"></div>
+    <h2>Hourly sensor readings by quality label</h2>
+    <div class="tablewrap" id="counts"></div>
+  </section>
+
+  <section class="tab" id="t-model"><div class="md" id="modelcard">Loading…</div></section>
+
+  <section class="tab" id="t-about">
+    <h2>Where the data comes from</h2>
+    <div class="md" id="about">Loading…</div>
+    <h3>Sensors behind the city averages</h3>
+    <div class="tablewrap" id="owners"></div>
+    <p class="muted">Raw published files: <a id="datalink" target="_blank" rel="noopener">Hugging Face dataset</a>.</p>
+  </section>
+</main>
+
+<script>
+const DATA_REPO = "__DATA_REPO__";      // filled in by `python -m smog deploy-space`
+const params = new URLSearchParams(location.search);
+const BASE = params.get("data") || `https://huggingface.co/datasets/${DATA_REPO}/resolve/main/`;
+const UNHEALTHY = 55.5, TZ = "Asia/Karachi";
+const CITIES = {
+  lahore: {en: "Lahore", ur: "لاہور", color: "#c2410c"},
+  islamabad_rawalpindi: {en: "Islamabad / Rawalpindi", ur: "اسلام آباد / راولپنڈی", color: "#0e7490"},
+  peshawar: {en: "Peshawar", ur: "پشاور", color: "#a16207"},
+  karachi: {en: "Karachi", ur: "کراچی", color: "#4338ca"},
+};
+const DRIVERS_UR = {
+  "smog already in the air (today and recent days)": "فضا میں پہلے سے موجود اسموگ (آج اور پچھلے دن)",
+  "tomorrow's weather (wind, rain, mixing height)": "کل کا موسم (ہوا، بارش، فضا کی ملاوٹ کی اونچائی)",
+  "today's weather": "آج کا موسم",
+  "fires nearby (crop burning)": "قریبی آگ (فصلوں کی باقیات جلانا)",
+  "CAMS air-quality model": "CAMS فضائی معیار ماڈل",
+  "season": "موسم کا وقت (سیزن)",
+};
+let D = {};                                           // loaded files
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const bool = v => v === true || String(v).toLowerCase() === "true";
+const num = v => (v === null || v === undefined || v === "" ? NaN : Number(v));
+const pct = v => isNaN(v) ? "–" : `${Math.round(v * 100)}%`;
+const parseTs = s => s ? new Date(String(s).replace(" ", "T")) : null;
+const fmtPkt = (d, opts) => d ? d.toLocaleString("en-GB", {timeZone: TZ, ...opts}) : "–";
+const pktStamp = d => fmtPkt(d, {weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false}) + " PKT";
+const hoursSince = d => d ? (Date.now() - d.getTime()) / 3.6e6 : Infinity;
+const ago = d => { const h = hoursSince(d); return !isFinite(h) ? "never" : h < 1.5 ? `${Math.round(h * 60)} min ago` : `${h.toFixed(1)} h ago`; };
+const thrFor = r => 1 / (1 + r);
+const R = () => Number($("r").value);
+const LANG = () => document.querySelector("input[name=lang]:checked").value;
+const theme = () => matchMedia("(prefers-color-scheme: dark)").matches
+  ? {paper_bgcolor: "#111827", plot_bgcolor: "#111827", font: {color: "#e5e7eb"}} : {};
+
+async function getText(name) {
+  try { const r = await fetch(BASE + name + (params.get("data") ? "" : `?t=${Date.now()}`)); return r.ok ? await r.text() : null; }
+  catch (e) { return null; }
+}
+async function getCsv(name) {
+  const t = await getText(name);
+  return t ? Papa.parse(t, {header: true, dynamicTyping: true, skipEmptyLines: true}).data : [];
+}
+async function getJson(name) { const t = await getText(name); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
+
+function table(rows, cols) {
+  if (!rows || !rows.length) return "<p class='muted' style='padding:10px'>Nothing published yet.</p>";
+  cols = cols || Object.keys(rows[0]);
+  const head = cols.map(c => `<th>${esc(Array.isArray(c) ? c[1] : c)}</th>`).join("");
+  const body = rows.map(r => "<tr>" + cols.map(c => {
+    const k = Array.isArray(c) ? c[0] : c; let v = r[k];
+    if (typeof v === "number" && !Number.isInteger(v)) v = Math.round(v * 100) / 100;
+    return `<td>${esc(v)}</td>`; }).join("") + "</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ---------- load ----------
+async function load() {
+  const csv = ["predictions.csv", "city_daily.csv", "scorecard.csv", "freshness.csv", "quality_gates.csv",
+    "quality_decisions.csv", "qc_status_counts.csv", "sensors.csv", "reports/test_predictions.csv",
+    "reports/validation_predictions.csv", "reports/test_errors_by_city.csv"];
+  const json = ["pipeline_status.json", "published.json", "reports/model_metrics.json", "reports/decision_metrics.json"];
+  const [c, j, card, readme] = await Promise.all([
+    Promise.all(csv.map(getCsv)), Promise.all(json.map(getJson)), getText("reports/MODEL_CARD.md"), getText("README.md")]);
+  D = {}; csv.forEach((n, i) => D[n] = c[i]); json.forEach((n, i) => D[n] = j[i]);
+  D.card = card; D.readme = readme;
+  const p = D["predictions.csv"].filter(r => r.issued_utc);
+  p.forEach(r => r.issued = parseTs(r.issued_utc));
+  D.pred = p;
+  const latest = Math.max(...p.map(r => r.issued.getTime()));
+  D.latest = p.filter(r => r.issued.getTime() === latest);
+  renderAll();
+}
+
+// ---------- status ----------
+function renderStatus() {
+  const st = D["pipeline_status.json"] || {}, pub = parseTs((D["published.json"] || {}).published_utc);
+  const lastOk = parseTs((st.last_success || {}).finished_utc), last = st.last_run || {};
+  const gates = D["quality_gates.csv"], g = gates[0];
+  const gateOk = g && bool(g.gate1_passed) && bool(g.gate2_passed);
+  const stale = D["freshness.csv"].filter(r => hoursSince(parseTs(r.newest_utc)) > num(r.limit_hours)).map(r => r.source);
+  const chip = (ok, t) => `<span class="chip ${ok ? "ok" : "bad"}">${esc(t)}</span>`;
+  if (!pub && !st.last_run) { $("chips").innerHTML = chip(false, "No published data found yet"); return; }
+  $("chips").innerHTML = [
+    chip(hoursSince(pub) < 2, `Dashboard data updated ${ago(pub)}`),
+    chip(last.status === "success", `Last run: ${last.status || "unknown"}`),
+    chip(!!lastOk && hoursSince(lastOk) < 2, `Last successful run: ${lastOk ? pktStamp(lastOk) : "never"} (${ago(lastOk)})`),
+    chip(gateOk, gateOk ? "Quality gates: PASS" : "Quality gates: FAILED"),
+    chip(stale.length === 0, stale.length ? `Stale: ${stale.join(", ")}` : "All sources fresh"),
+  ].join("");
+  let warn = "";
+  if (hoursSince(pub) >= 2) warn = "The hourly pipeline has not published for over 2 hours. Forecasts below may be out of date.";
+  else if (last.status && last.status !== "success")
+    warn = `The last run failed (${(last.steps || {}).error || ""}). Showing results from the last successful run.`;
+  $("banner").innerHTML = warn ? `<div class="banner bad">${esc(warn)}</div>` : "";
+}
+
+// ---------- tomorrow ----------
+function renderCards() {
+  const rows = D.latest || [], ur = LANG() === "ur", thr = thrFor(R());
+  $("rv").textContent = R(); $("thr").textContent = pct(thr);
+  if (!rows.length) { $("cards").innerHTML = "<p>No forecast published yet.</p>"; return; }
+  const issued = rows[0].issued, target = rows[0].target_day_pkt;
+  const cards = Object.keys(CITIES).map(id => {
+    const r = rows.find(x => x.city_id === id); if (!r) return "";
+    const prob = num(r.p_unhealthy), warn = prob >= thr, info = CITIES[id];
+    let drivers = [];
+    try { drivers = JSON.parse(r.drivers_json || "[]").slice(0, 3); } catch (e) {}
+    const why = drivers.map(d => ur
+      ? `<li>${esc(DRIVERS_UR[d.driver] || d.driver)}: ${Math.abs(d.effect_ugm3).toFixed(0)} µg/m³ ${d.effect_ugm3 > 0 ? "بڑھاتا ہے" : "کم کرتا ہے"}</li>`
+      : `<li><b>${d.effect_ugm3 > 0 ? "+" : "−"}${Math.abs(d.effect_ugm3).toFixed(0)}</b> ${esc(d.driver)}</li>`).join("");
+    const advice = ur ? (warn ? "اسموگ ایڈوائزری جاری کرنے کی سفارش" : "ایڈوائزری کی ضرورت نہیں")
+                      : (warn ? "Recommend: issue smog advisory" : "No advisory needed");
+    const body = ur
+      ? `<div class="num">${num(r.pm25_pred).toFixed(0)} <small>µg/m³</small></div>
+         <div>اندازاً ${num(r.pm25_p10).toFixed(0)} سے ${num(r.pm25_p90).toFixed(0)} تک (80٪ امکان)</div>
+         <div>غیر صحت مند دن کا امکان: <b>${pct(prob)}</b></div>`
+      : `<div class="num">${num(r.pm25_pred).toFixed(0)} <small>µg/m³</small></div>
+         <div>80% range: ${num(r.pm25_p10).toFixed(0)} – ${num(r.pm25_p90).toFixed(0)}</div>
+         <div>Chance of an unhealthy day (≥ ${UNHEALTHY}): <b>${pct(prob)}</b></div>`;
+    return `<div class="card" style="border-top-color:${info.color}" ${ur ? "dir=rtl" : ""}>
+      <div class="city">${ur ? info.ur : info.en}</div>${body}
+      <div class="advice ${warn ? "bad" : "ok"}">${advice}</div>
+      <div class="why">${ur ? "وجوہات:" : "Why (vs a typical day for this city):"}<ul>${why}</ul></div>
+      <div class="src">row ${esc(r.row_id)}</div></div>`;
+  }).join("");
+  const head = ur
+    ? `<p dir="rtl"><b>کل: ${esc(target)}</b> · جاری کیا گیا ${pktStamp(issued)} · ایڈوائزری کی حد ${pct(thr)} (R = ${R()})</p>`
+    : `<p><b>Tomorrow: ${esc(target)}</b> · issued ${pktStamp(issued)} · advisory when chance ≥ ${pct(thr)} (R = ${R()})</p>`;
+  $("cards").innerHTML = head + `<div class="cards">${cards}</div>`;
+  renderBulletin();
+}
+
+function renderBulletin() {
+  const rows = D.latest || [], thr = thrFor(R());
+  if (!rows.length) { $("bulletin").value = ""; return; }
+  const lines = [`اسموگ پیش گوئی برائے ${rows[0].target_day_pkt} (اوسط PM2.5، µg/m³)`, ""];
+  Object.keys(CITIES).forEach(id => {
+    const r = rows.find(x => x.city_id === id); if (!r) return;
+    const flag = num(r.p_unhealthy) >= thr ? "⚠️ ایڈوائزری کی سفارش" : "✅ معمول";
+    lines.push(`• ${CITIES[id].ur}: ${num(r.pm25_pred).toFixed(0)} (${num(r.pm25_p10).toFixed(0)}–${num(r.pm25_p90).toFixed(0)})، غیر صحت مند دن کا امکان ${pct(num(r.p_unhealthy))} — ${flag}`);
+  });
+  lines.push("", "احتیاط: باہر کم وقت گزاریں، ماسک (N95) استعمال کریں، بچوں اور بزرگوں کا خاص خیال رکھیں۔",
+    "یہ ایک کمپیوٹر ماڈل کا اندازہ ہے؛ سرکاری ہدایات (پنجاب EPA / PDMA) پر عمل کریں۔");
+  $("bulletin").value = lines.join("\n");
+}
+
+function renderEvolution() {
+  const p = D.pred || []; if (!p.length) return;
+  const target = D.latest[0].target_day_pkt, traces = [];
+  Object.entries(CITIES).forEach(([id, info]) => {
+    const c = p.filter(r => r.city_id === id && r.target_day_pkt === target).sort((a, b) => a.issued - b.issued);
+    if (!c.length) return;
+    const x = c.map(r => r.issued);
+    traces.push({x: x.concat([...x].reverse()), y: c.map(r => r.pm25_p90).concat(c.map(r => r.pm25_p10).reverse()),
+      fill: "toself", fillcolor: info.color, opacity: 0.12, line: {width: 0}, hoverinfo: "skip", showlegend: false});
+    traces.push({x, y: c.map(r => r.pm25_pred), name: info.en, mode: "lines+markers", line: {color: info.color, width: 2}});
+  });
+  Plotly.react("p-evolution", traces, {title: `How the forecast for ${target} changed with each hourly run`, height: 380,
+    yaxis: {title: "PM2.5 µg/m³"}, xaxis: {title: "issued (shown in your browser's time zone)"},
+    shapes: [hline()], margin: {l: 50, r: 20, t: 50, b: 50}, legend: {orientation: "h", y: -0.25}, ...theme()},
+    {responsive: true, displaylogo: false});
+}
+const hline = () => ({type: "line", xref: "paper", x0: 0, x1: 1, y0: UNHEALTHY, y1: UNHEALTHY, line: {dash: "dot", color: "#b91c1c"}});
+
+// ---------- report card ----------
+function renderReport() {
+  const city = $("city").value, info = CITIES[city];
+  const daily = D["city_daily.csv"].filter(r => r.city_id === city).sort((a, b) => a.day_pkt < b.day_pkt ? -1 : 1).slice(-60);
+  const sc = D["scorecard.csv"].filter(r => r.city_id === city);
+  const traces = [{x: daily.map(r => r.day_pkt), y: daily.map(r => r.pm25_mean), name: "measured daily mean",
+    mode: "lines+markers", line: {color: info.color}}];
+  if (sc.length) traces.push({x: sc.map(r => r.target_day_pkt), y: sc.map(r => r.pm25_pred), mode: "markers",
+    name: "our forecast (evening before)", marker: {symbol: "diamond", size: 11, color: "#111827"},
+    error_y: {type: "data", symmetric: false, array: sc.map(r => r.pm25_p90 - r.pm25_pred), arrayminus: sc.map(r => r.pm25_pred - r.pm25_p10)}});
+  Plotly.react("p-history", traces, {title: `${info.en}: last 60 days (measured) and our live forecasts`, height: 380,
+    yaxis: {title: "PM2.5 µg/m³"}, shapes: [hline()], margin: {l: 50, r: 20, t: 50, b: 40},
+    legend: {orientation: "h", y: -0.2}, ...theme()}, {responsive: true, displaylogo: false});
+
+  const all = D["scorecard.csv"].map(r => ({...r, city: (CITIES[r.city_id] || {}).en || r.city_id,
+    "P(unhealthy)": pct(num(r.p_unhealthy))}));
+  $("score").innerHTML = all.length ? table(all, [["target_day_pkt", "day"], "city", ["pm25_pred", "forecast"],
+    ["pm25_p10", "low"], ["pm25_p90", "high"], "P(unhealthy)", ["pm25_mean", "measured"], "status", ["error", "our error"],
+    ["persistence_error", "baseline error"], ["issued_pkt", "issued (PKT)"]])
+    : "<p class='muted' style='padding:10px'>The first live forecasts are scored once their target day has data.</p>";
+
+  const m = D["reports/model_metrics.json"];
+  if (m && m.test) {
+    const t = m.test;
+    $("headline").innerHTML = `<b>Locked test month (${m.test_rows} city-days, ${m.test_target_days.join(" to ")}):</b>
+      our error ${t.model.mae} µg/m³ vs ${t.baseline_same_info.mae} for <i>same as today</i> →
+      <b>${t.improvement_vs_baseline_pct}% better</b>. The 80% range held the real value ${pct(t.interval_80_coverage)} of the
+      time (calibrated on validation months only).`;
+  }
+  const bt = D["reports/test_predictions.csv"].filter(r => r.city_id === city).sort((a, b) => a.target_day < b.target_day ? -1 : 1);
+  const x = bt.map(r => r.target_day);
+  Plotly.react("p-backtest", [
+    {x: x.concat([...x].reverse()), y: bt.map(r => r.p90).concat(bt.map(r => r.p10).reverse()), fill: "toself",
+     fillcolor: info.color, opacity: 0.15, line: {width: 0}, name: "80% range"},
+    {x, y: bt.map(r => r.prediction), name: "forecast", line: {color: info.color}},
+    {x, y: bt.map(r => r.target), name: "what happened", mode: "markers", marker: {color: "#111827"}},
+    {x, y: bt.map(r => r.baseline_same_info), name: "baseline: same as today", line: {color: "#94a3b8", dash: "dash"}},
+  ], {title: `${info.en}: back-test on the locked test month (never used for tuning)`, height: 380,
+    yaxis: {title: "PM2.5 µg/m³"}, shapes: [hline()], margin: {l: 50, r: 20, t: 50, b: 40},
+    legend: {orientation: "h", y: -0.2}, ...theme()}, {responsive: true, displaylogo: false});
+  $("errors").innerHTML = table(D["reports/test_errors_by_city.csv"].map(r => ({...r, city: (CITIES[r.city] || {}).en || r.city})),
+    ["city", "days", ["model_mae", "our MAE"], ["baseline_mae", "baseline MAE"], ["improvement_pct", "% better"],
+     ["model_bias", "bias"], ["interval_coverage", "80% range coverage"]]);
+}
+
+// ---------- advisory rule ----------
+function renderRule() {
+  const r = R(), thr = thrFor(r), rows = [];
+  [["validation months", "reports/validation_predictions.csv"], ["test month (October)", "reports/test_predictions.csv"]]
+    .forEach(([period, name]) => {
+      const df = D[name] || []; if (!df.length) return;
+      const bad = df.map(x => x.target >= UNHEALTHY);
+      [[`Our rule: chance ≥ ${pct(thr)}`, df.map(x => x.p_unhealthy >= thr)],
+       ["Warn if today is unhealthy", df.map(x => x.baseline_same_info >= UNHEALTHY)],
+       ["Warn if forecast number ≥ 55.5", df.map(x => x.prediction >= UNHEALTHY)]].forEach(([label, warn]) => {
+        let hit = 0, miss = 0, fa = 0;
+        warn.forEach((w, i) => { if (w && bad[i]) hit++; else if (!w && bad[i]) miss++; else if (w && !bad[i]) fa++; });
+        rows.push({period, rule: label, "unhealthy days": bad.filter(Boolean).length, caught: hit, missed: miss,
+          "false alarms": fa, "cost per 100 days": Math.round(1000 * (fa + r * miss) / df.length) / 10});
+      });
+    });
+  $("replay").innerHTML = table(rows);
+  const rel = (D["reports/decision_metrics.json"] || {}).reliability_validation || [];
+  Plotly.react("p-reliability", [
+    {x: [0, 1], y: [0, 1], mode: "lines", name: "perfectly honest", line: {dash: "dash", color: "#94a3b8"}},
+    {x: rel.map(b => b.said), y: rel.map(b => b.happened), mode: "lines+markers", name: "our chances",
+     text: rel.map(b => `${b.days} days`), marker: {size: rel.map(b => Math.max(6, Math.min(30, b.days / 15))), color: "#0e7490"}},
+  ], {title: "When we said X% chance, how often was it really unhealthy? (validation months)", height: 360,
+    xaxis: {title: "chance we gave", tickformat: ".0%"}, yaxis: {title: "share of days that were unhealthy", tickformat: ".0%"},
+    margin: {l: 60, r: 20, t: 50, b: 50}, ...theme()}, {responsive: true, displaylogo: false});
+}
+
+// ---------- quality, model card, about ----------
+function renderQuality() {
+  $("gates").innerHTML = table(D["quality_gates.csv"].slice(0, 24));
+  $("decisions").innerHTML = table(D["quality_decisions.csv"], ["check", "action", "rule", "rows_affected", "reason"]);
+  $("fresh").innerHTML = table(D["freshness.csv"].map(r => {
+    const age = hoursSince(parseTs(r.newest_utc));
+    return {source: r.source, "newest data (PKT)": pktStamp(parseTs(r.newest_utc)), "age now (h)": age.toFixed(1),
+      "allowed (h)": r.limit_hours, status: age <= num(r.limit_hours) ? "fresh" : "STALE"};
+  }));
+  $("counts").innerHTML = table(D["qc_status_counts.csv"]);
+  $("modelcard").innerHTML = D.card ? marked.parse(D.card) : "Model card not published yet.";
+  $("about").innerHTML = D.readme ? marked.parse(D.readme.replace(/^---[\s\S]*?---/, "")) : "";
+  const s = D["sensors.csv"];
+  const key = r => `${r.city_id || ""}|${r.owner || "unknown"}|${r.provider || ""}`, counts = {};
+  s.forEach(r => counts[key(r)] = (counts[key(r)] || 0) + 1);
+  $("owners").innerHTML = table(Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
+    const [city, owner, provider] = k.split("|");
+    return {city: (CITIES[city] || {}).en || city, owner, provider, sensors: n};
+  }));
+  $("datalink").href = params.get("data") || `https://huggingface.co/datasets/${DATA_REPO}`;
+}
+
+function renderAll() {
+  renderStatus(); renderCards(); renderEvolution(); renderReport(); renderRule(); renderQuality();
+}
+
+// ---------- wiring ----------
+$("city").innerHTML = Object.entries(CITIES).map(([k, v]) => `<option value="${k}">${v.en}</option>`).join("");
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#tabs button, .tab").forEach(e => e.classList.remove("active"));
+  b.classList.add("active"); $(b.dataset.tab).classList.add("active");
+  window.dispatchEvent(new Event("resize"));          // let Plotly size charts in a newly shown tab
+});
+$("r").oninput = () => { renderCards(); renderRule(); };
+document.querySelectorAll("input[name=lang]").forEach(e => e.onchange = renderCards);
+$("city").onchange = renderReport;
+$("refresh").onclick = load;
+$("copy").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("bulletin").value);
+load();
+setInterval(load, 5 * 60 * 1000);                     // re-check for new data every 5 minutes
+setInterval(renderStatus, 60 * 1000);                 // keep "x min ago" honest
+</script>
+</body>
+</html>
