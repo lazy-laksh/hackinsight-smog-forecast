@@ -649,9 +649,19 @@ let askN = 0;
 function askStatus(state, text) { $("ask-status").innerHTML = `<i class="dot${state === "bad" ? " bad" : ""}"${state === "wait" ? ' style="background:var(--moderate)"' : ""}></i>${esc(text)}`; }
 async function wakeAgent() {
   if (!agentOn()) { askStatus("bad", "The assistant is not connected to this page yet. It runs on its own small server (see README)."); return; }
-  askStatus("wait", "Waking the assistant (free server, the first time can take about a minute)…");
-  try { const r = await fetch(AGENT_URL + "/health"); if (!r.ok) throw 0; askStatus("ok", "Assistant ready"); }
-  catch (e) { askStatus("bad", "The assistant is offline right now. The forecast above does not depend on it."); }
+  // The free server sleeps after 15 idle minutes. While it wakes, its host answers without the headers a
+  // browser needs, so a first failure is normal: keep checking for up to about 2 minutes before giving up.
+  const started = Date.now();
+  while (Date.now() - started < 130000) {
+    askStatus("wait", `Waking the assistant (free server, up to a minute or two)… ${Math.round((Date.now() - started) / 1000)}s`);
+    try {
+      const r = await fetch(AGENT_URL + "/health", {cache: "no-store", signal: AbortSignal.timeout(20000)});
+      if (r.ok) { askStatus("ok", "Assistant ready"); return true; }
+    } catch (e) { /* still waking */ }
+    await new Promise(res => setTimeout(res, 6000));
+  }
+  askStatus("bad", "The assistant is offline right now. The forecast above does not depend on it.");
+  return false;
 }
 function renderAnswer(a, q) {
   const order = [], k = ++askN;
@@ -675,7 +685,9 @@ async function askAgent(q) {
   turn.innerHTML = qh + `<p class="thinking">Searching the sources and checking every number…</p>`;
   $("ask-thread").append(turn);
   try {
-    const r = await fetch(AGENT_URL + "/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question: q})});
+    if (!$("ask-status").textContent.includes("ready") && !(await wakeAgent())) throw new Error("the assistant is offline");
+    const r = await fetch(AGENT_URL + "/ask", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({question: q}), signal: AbortSignal.timeout(150000)});
     const a = await r.json(); if (a.error) throw new Error(a.error);
     turn.innerHTML = qh + renderAnswer(a, q); askStatus("ok", "Assistant ready");
   } catch (err) { turn.innerHTML = qh + `<p class="a">Could not get an answer: ${esc(err.message || "the assistant is offline")}.</p>`; }
