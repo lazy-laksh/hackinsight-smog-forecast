@@ -23,3 +23,14 @@ def test_page_reads_every_file_that_publish_writes():
     for name in publish.REPORT_FILES:
         if name.endswith((".csv", ".json", ".md")) and name != "validation_errors_by_city_and_season.csv":
             assert f"reports/{name}" in html, name
+
+
+def test_space_metadata_is_valid_for_hugging_face():
+    meta = (config.ROOT / "space_static/README.md").read_text(encoding="utf-8").split("---")[1]
+    short = [line for line in meta.splitlines() if line.startswith("short_description:")][0]
+    assert len(short.split(":", 1)[1].strip()) <= 60          # Hugging Face rejects longer ones
+
+
+def test_missing_probability_is_never_shown_as_no_advisory():
+    html = (config.ROOT / "space_static/index.html").read_text(encoding="utf-8")
+    assert "Chance not computed for this run" in html and "امکان دستیاب نہیں" in html

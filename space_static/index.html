@@ -251,8 +251,11 @@ function renderCards() {
     const why = drivers.map(d => ur
       ? `<li>${esc(DRIVERS_UR[d.driver] || d.driver)}: ${Math.abs(d.effect_ugm3).toFixed(0)} µg/m³ ${d.effect_ugm3 > 0 ? "بڑھاتا ہے" : "کم کرتا ہے"}</li>`
       : `<li><b>${d.effect_ugm3 > 0 ? "+" : "−"}${Math.abs(d.effect_ugm3).toFixed(0)}</b> ${esc(d.driver)}</li>`).join("");
-    const advice = ur ? (warn ? "اسموگ ایڈوائزری جاری کرنے کی سفارش" : "ایڈوائزری کی ضرورت نہیں")
-                      : (warn ? "Recommend: issue smog advisory" : "No advisory needed");
+    // Forecasts made before the decision layer existed have no probability: say so, never guess "no advisory".
+    const known = !isNaN(prob);
+    const advice = !known ? (ur ? "اس رن کے لیے امکان دستیاب نہیں" : "Chance not computed for this run")
+      : ur ? (warn ? "اسموگ ایڈوائزری جاری کرنے کی سفارش" : "ایڈوائزری کی ضرورت نہیں")
+           : (warn ? "Recommend: issue smog advisory" : "No advisory needed");
     const body = ur
       ? `<div class="num">${num(r.pm25_pred).toFixed(0)} <small>µg/m³</small></div>
          <div>اندازاً ${num(r.pm25_p10).toFixed(0)} سے ${num(r.pm25_p90).toFixed(0)} تک (80٪ امکان)</div>
@@ -262,8 +265,8 @@ function renderCards() {
          <div>Chance of an unhealthy day (≥ ${UNHEALTHY}): <b>${pct(prob)}</b></div>`;
     return `<div class="card" style="border-top-color:${info.color}" ${ur ? "dir=rtl" : ""}>
       <div class="city">${ur ? info.ur : info.en}</div>${body}
-      <div class="advice ${warn ? "bad" : "ok"}">${advice}</div>
-      <div class="why">${ur ? "وجوہات:" : "Why (vs a typical day for this city):"}<ul>${why}</ul></div>
+      <div class="advice ${!known ? "" : warn ? "bad" : "ok"}" style="${known ? "" : "border:1px dashed var(--line)"}">${advice}</div>
+      ${why ? `<div class="why">${ur ? "وجوہات:" : "Why (vs a typical day for this city):"}<ul>${why}</ul></div>` : ""}
       <div class="src">row ${esc(r.row_id)}</div></div>`;
   }).join("");
   const head = ur
@@ -279,7 +282,8 @@ function renderBulletin() {
   const lines = [`اسموگ پیش گوئی برائے ${rows[0].target_day_pkt} (اوسط PM2.5، µg/m³)`, ""];
   Object.keys(CITIES).forEach(id => {
     const r = rows.find(x => x.city_id === id); if (!r) return;
-    const flag = num(r.p_unhealthy) >= thr ? "⚠️ ایڈوائزری کی سفارش" : "✅ معمول";
+    const pr = num(r.p_unhealthy);
+    const flag = isNaN(pr) ? "امکان دستیاب نہیں" : pr >= thr ? "⚠️ ایڈوائزری کی سفارش" : "✅ معمول";
     lines.push(`• ${CITIES[id].ur}: ${num(r.pm25_pred).toFixed(0)} (${num(r.pm25_p10).toFixed(0)}–${num(r.pm25_p90).toFixed(0)})، غیر صحت مند دن کا امکان ${pct(num(r.p_unhealthy))} — ${flag}`);
   });
   lines.push("", "احتیاط: باہر کم وقت گزاریں، ماسک (N95) استعمال کریں، بچوں اور بزرگوں کا خاص خیال رکھیں۔",
