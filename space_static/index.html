@@ -164,6 +164,10 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&
 const bool = v => v === true || String(v).toLowerCase() === "true";
 const num = v => (v === null || v === undefined || v === "" ? NaN : Number(v));
 const pct = v => isNaN(v) ? "–" : `${Math.round(v * 100)}%`;
+const pct1 = v => isNaN(v) ? "–" : `${Math.round(v * 1000) / 10}%`;          // thresholds like 33.3%
+// A chance that rounds to the same whole % as the threshold is shown with one decimal, so
+// "33% → no advisory at a 33% threshold" never looks contradictory (it is 33.1% vs 33.3%).
+const chance = (p, thr) => Math.round(p * 100) === Math.round(thr * 100) ? pct1(p) : pct(p);
 const parseTs = s => s ? new Date(String(s).replace(" ", "T")) : null;
 const fmtPkt = (d, opts) => d ? d.toLocaleString("en-GB", {timeZone: TZ, ...opts}) : "–";
 const pktStamp = d => fmtPkt(d, {weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false}) + " PKT";
@@ -241,7 +245,7 @@ function renderStatus() {
 // ---------- tomorrow ----------
 function renderCards() {
   const rows = D.latest || [], ur = LANG() === "ur", thr = thrFor(R());
-  $("rv").textContent = R(); $("thr").textContent = pct(thr);
+  $("rv").textContent = R(); $("thr").textContent = pct1(thr);
   if (!rows.length) { $("cards").innerHTML = "<p>No forecast published yet.</p>"; return; }
   const issued = rows[0].issued, target = rows[0].target_day_pkt;
   const cards = Object.keys(CITIES).map(id => {
@@ -260,10 +264,10 @@ function renderCards() {
     const body = ur
       ? `<div class="num">${num(r.pm25_pred).toFixed(0)} <small>µg/m³</small></div>
          <div>اندازاً ${num(r.pm25_p10).toFixed(0)} سے ${num(r.pm25_p90).toFixed(0)} تک (80٪ امکان)</div>
-         <div>غیر صحت مند دن کا امکان: <b>${pct(prob)}</b></div>`
+         <div>غیر صحت مند دن کا امکان: <b>${chance(prob, thr)}</b></div>`
       : `<div class="num">${num(r.pm25_pred).toFixed(0)} <small>µg/m³</small></div>
          <div>80% range: ${num(r.pm25_p10).toFixed(0)} – ${num(r.pm25_p90).toFixed(0)}</div>
-         <div>Chance of an unhealthy day (≥ ${UNHEALTHY}): <b>${pct(prob)}</b></div>`;
+         <div>Chance of an unhealthy day (≥ ${UNHEALTHY}): <b>${chance(prob, thr)}</b></div>`;
     return `<div class="card" style="border-top-color:${info.color}" ${ur ? "dir=rtl" : ""}>
       <div class="city">${ur ? info.ur : info.en}</div>${body}
       <div class="advice ${!known ? "" : warn ? "bad" : "ok"}" style="${known ? "" : "border:1px dashed var(--line)"}">${advice}</div>
@@ -271,8 +275,8 @@ function renderCards() {
       <div class="src">row ${esc(r.row_id)}</div></div>`;
   }).join("");
   const head = ur
-    ? `<p dir="rtl"><b>کل: ${esc(target)}</b> · جاری کیا گیا ${pktStamp(issued)} · ایڈوائزری کی حد ${pct(thr)} (R = ${R()})</p>`
-    : `<p><b>Tomorrow: ${esc(target)}</b> · issued ${pktStamp(issued)} · advisory when chance ≥ ${pct(thr)} (R = ${R()})</p>`;
+    ? `<p dir="rtl"><b>کل: ${esc(target)}</b> · جاری کیا گیا ${pktStamp(issued)} · ایڈوائزری کی حد ${pct1(thr)} (R = ${R()})</p>`
+    : `<p><b>Tomorrow: ${esc(target)}</b> · issued ${pktStamp(issued)} · advisory when chance ≥ ${pct1(thr)} (R = ${R()})</p>`;
   $("cards").innerHTML = head + `<div class="cards">${cards}</div>`;
   renderBulletin();
 }
@@ -285,7 +289,7 @@ function renderBulletin() {
     const r = rows.find(x => x.city_id === id); if (!r) return;
     const pr = num(r.p_unhealthy);
     const flag = isNaN(pr) ? "امکان دستیاب نہیں" : pr >= thr ? "⚠️ ایڈوائزری کی سفارش" : "✅ معمول";
-    lines.push(`• ${CITIES[id].ur}: ${num(r.pm25_pred).toFixed(0)} (${num(r.pm25_p10).toFixed(0)}–${num(r.pm25_p90).toFixed(0)})، غیر صحت مند دن کا امکان ${pct(num(r.p_unhealthy))} — ${flag}`);
+    lines.push(`• ${CITIES[id].ur}: ${num(r.pm25_pred).toFixed(0)} (${num(r.pm25_p10).toFixed(0)}–${num(r.pm25_p90).toFixed(0)})، غیر صحت مند دن کا امکان ${chance(num(r.p_unhealthy), thr)} — ${flag}`);
   });
   lines.push("", "احتیاط: باہر کم وقت گزاریں، ماسک (N95) استعمال کریں، بچوں اور بزرگوں کا خاص خیال رکھیں۔",
     "یہ ایک کمپیوٹر ماڈل کا اندازہ ہے؛ سرکاری ہدایات (پنجاب EPA / PDMA) پر عمل کریں۔");
@@ -363,7 +367,7 @@ function renderRule() {
     .forEach(([period, name]) => {
       const df = D[name] || []; if (!df.length) return;
       const bad = df.map(x => x.target >= UNHEALTHY);
-      [[`Our rule: chance ≥ ${pct(thr)}`, df.map(x => x.p_unhealthy >= thr)],
+      [[`Our rule: chance ≥ ${pct1(thr)}`, df.map(x => x.p_unhealthy >= thr)],
        ["Warn if today is unhealthy", df.map(x => x.baseline_same_info >= UNHEALTHY)],
        ["Warn if forecast number ≥ 55.5", df.map(x => x.prediction >= UNHEALTHY)]].forEach(([label, warn]) => {
         let hit = 0, miss = 0, fa = 0;
