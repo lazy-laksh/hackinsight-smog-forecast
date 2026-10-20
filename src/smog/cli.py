@@ -103,6 +103,10 @@ def run_fetch_openaq(city: str | None, max_locations: int | None, retry_gaps: bo
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:                       # Windows consoles default to a code page that cannot print Urdu or µ
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(prog="smog", description="Smog forecasting pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("data", help="run the whole pipeline (what `make data` does)")
@@ -122,6 +126,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("train", help="train the forecast model, score it on the test set, write reports/")
     sub.add_parser("predict", help="forecast tomorrow for each city and add it to gold.predictions")
     sub.add_parser("publish", help="export dashboard files to data/publish and upload them to Hugging Face")
+    ask = sub.add_parser("ask", help="ask the Insight Agent a question (answers with citations or says I don't know)")
+    ask.add_argument("question", nargs="+")
+    ui = sub.add_parser("agent-ui", help="open a local web page to chat with the Insight Agent")
+    ui.add_argument("--port", type=int, default=8000)
+    sub.add_parser("agent-models", help="list the Groq chat models this account can use")
+    sub.add_parser("summary", help="write reports/Summary.html (all numbers from reports/), then print it to PDF")
+    sub.add_parser("eval-agent", help="run the Insight Agent on the golden question set, write reports/agent_eval.csv")
     space = sub.add_parser("deploy-space", help="create or update the Hugging Face Space (the dashboard)")
     space.add_argument("--name", default="smog-forecast-pakistan", help="Space name under your HF account")
     export = sub.add_parser("export-runs", help="write Prefect run history to prefect_runs.csv")
@@ -179,6 +190,31 @@ def main(argv: list[str] | None = None) -> int:
             print(f"SKIPPED: {missing.name} is not installed here (run `pip install -r requirements.txt`)")
             return 0
         print(publish.run())
+        return 0
+    if args.command == "ask":
+        from smog import agent
+        print(agent.format_answer(agent.InsightAgent().ask(" ".join(args.question))))
+        return 0
+    if args.command == "agent-models":
+        from smog import agent
+        models = agent.groq_models()
+        print("\n".join(models))
+        print(f"-> the agent would use: {agent.pick_model(models)}")
+        return 0
+    if args.command == "summary":
+        from smog import summary
+        print(summary.build())
+        return 0
+    if args.command == "agent-ui":
+        from smog import agent_ui
+        agent_ui.serve(args.port)
+        return 0
+    if args.command == "eval-agent":
+        from smog import agent
+        df = agent.evaluate(agent.InsightAgent())
+        for r in df.itertuples():
+            print(f"{'PASS' if r.passed else 'FAIL'}  {r.id:<20} {r.failed_checks}")
+        print(f"{int(df['passed'].sum())}/{len(df)} passed -> reports/agent_eval.csv")
         return 0
     if args.command == "deploy-space":
         from smog import space_deploy

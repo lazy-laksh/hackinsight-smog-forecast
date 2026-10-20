@@ -1,0 +1,169 @@
+"""Tests for the Insight Agent with a fake language model (no network, no API key)."""
+import json
+
+import pandas as pd
+import pytest
+
+from smog import agent
+
+PRED_ID = "pred|lahore|20261021|20261020T1511"
+
+
+@pytest.fixture
+def folder(tmp_path):
+    pd.DataFrame([{
+        "city_id": "lahore", "issued_utc": "2026-10-20 10:11:00+00:00", "target_day_pkt": "2026-10-21",
+        "pm25_pred": 114.4, "pm25_p10": 85.9, "pm25_p90": 149.2, "p_unhealthy": 0.99, "advisory_default": True,
+        "baseline_persistence": 98.2, "row_id": PRED_ID,
+        "drivers_json": json.dumps([{"driver": "smog already in the air (today and recent days)", "effect_ugm3": 39.0},
+                                    {"driver": "season", "effect_ugm3": 10.0}])}]).to_csv(tmp_path / "predictions.csv", index=False)
+    pd.DataFrame([{"city_id": "lahore", "day_pkt": "2026-10-19", "pm25_mean": 110.2, "hours_covered": 24,
+                   "complete": True, "row_id": "cityday|lahore|20261019"}]).to_csv(tmp_path / "city_daily.csv", index=False)
+    pd.DataFrame([{"source": "openaq", "newest_utc": "2026-10-20 09:00:00+00:00", "age_hours": 1.2,
+                   "limit_hours": 6, "status": "fresh"}]).to_csv(tmp_path / "freshness.csv", index=False)
+    return tmp_path
+
+
+def make(folder, replies):
+    replies = list(replies)
+    calls = []
+
+    def fake(messages):
+        calls.append(messages)
+        return replies.pop(0)
+    a = agent.InsightAgent(folder=folder, llm=fake)
+    a.calls = calls
+    return a
+
+
+def test_documents_are_chunked_with_ids_and_urls():
+    docs = agent.load_documents()
+    ids = {d.id.split("#")[0] for d in docs}
+    assert {"doc:who-aqg-2021", "doc:pak-neqs-2010", "doc:epa-aqi-2024", "doc:project-methods"} <= ids
+    assert all(d.url.startswith("http") for d in docs)
+
+
+def test_retrieval_finds_the_right_document():
+    r = agent.Retriever(agent.load_documents())
+    top = lambda q: [d.id.split("#")[0] for d, _ in r.search(q)]          # what the model is shown
+    assert "doc:who-aqg-2021" in top("WHO 24-hour guideline PM2.5")
+    assert top("Pakistan national standard NEQS")[0] == "doc:pak-neqs-2010"
+    assert top("stuck sensor quality flag")[0] == "doc:project-methods"
+    assert "doc:punjab-schools-2026" in top("what must schools do about smog")
+
+
+def test_facts_are_built_from_gold_rows(folder):
+    facts = {f.id: f.text for f in agent.build_facts(folder)}
+    assert "114.4" in facts[f"row:{PRED_ID}"] and "99%" in facts[f"row:{PRED_ID}"]
+    assert "110.2" in facts["row:cityday|lahore|20261019"]
+
+
+def test_good_answer_passes(folder):
+    a = make(folder, [f"Lahore's forecast for 2026-10-21 is 114.4 µg/m³ with a 99% chance of an unhealthy day [row:{PRED_ID}]."])
+    out = a.ask("Lahore tomorrow?", log=False)
+    assert out.verified and out.citations[0]["id"] == f"row:{PRED_ID}" and out.attempts == 1
+
+
+def test_invented_number_is_caught_then_fixed(folder):
+    a = make(folder, [f"Lahore will be 130 µg/m³ [row:{PRED_ID}].",
+                      f"Lahore will be 114.4 µg/m³ [row:{PRED_ID}]."])
+    out = a.ask("Lahore tomorrow?", log=False)
+    assert out.verified and out.attempts == 2 and "114.4" in out.answer
+    assert "130" in a.calls[1][-1]["content"]            # the model was told exactly what was wrong
+
+
+def test_answer_that_stays_wrong_becomes_i_dont_know(folder):
+    a = make(folder, [f"Lahore will be 130 [row:{PRED_ID}].", "Lahore will be 131 [row:{PRED_ID}]."])
+    out = a.ask("Lahore tomorrow?", log=False)
+    assert not out.verified and out.answer == agent.IDK_EN
+
+
+def test_made_up_citation_and_missing_citation_are_rejected(folder):
+    sources = agent.build_facts(folder)
+    assert "unknown citation [row:made-up]" in agent.check("It is 114.4 [row:made-up].", sources)
+    assert "no citation" in agent.check("It is 114.4 µg/m³.", sources)
+    assert agent.check(agent.IDK_EN, sources) == []
+
+
+def test_urdu_question_gets_translated_for_search_and_urdu_digits_are_checked(folder):
+    a = make(folder, ["What will PM2.5 be in Lahore tomorrow?",
+                      f"کل لاہور میں پی ایم 2.5 کی پیش گوئی ۱۱۴.۴ ہے [row:{PRED_ID}]۔"])
+    out = a.ask("کل لاہور میں پی ایم 2.5 کتنا ہو گا؟", log=False)
+    assert out.language == "ur" and out.verified
+    assert "Translate" in a.calls[0][0]["content"]
+
+
+def test_answers_are_logged(folder, tmp_path, monkeypatch):
+    from smog import config
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    a = agent.InsightAgent(folder=folder, llm=lambda m: agent.IDK_EN,
+                           root=config.ROOT.__class__(__file__).resolve().parents[1])
+    a.ask("Who wins the cricket?")
+    line = json.loads((tmp_path / "data/logs/agent_log.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert line["answer"] == agent.IDK_EN and line["verified"] is True
+
+
+def test_golden_set_is_well_formed():
+    from smog import config
+    qs = config.load_yaml("agent_golden")["questions"]
+    assert len(qs) >= 15 and {q["expect"] for q in qs} == {"answer", "idk"}
+    assert len({q["id"] for q in qs}) == len(qs)
+
+
+def test_model_fallback_prefers_strong_chat_models():
+    assert agent.pick_model(["llama-3.1-8b-instant", "openai/gpt-oss-120b"]) == "openai/gpt-oss-120b"
+    assert agent.pick_model(["some-new-model"]) == "some-new-model"
+
+
+def test_citation_parsing_handles_model_habits():
+    assert agent.cited_ids("x [doc:a#1, doc:b#2] y [row:p|l|1; report:m]") == ["doc:a#1", "doc:b#2", "row:p|l|1", "report:m"]
+    assert agent.cited_ids("x [doc:pak‑neqs‑2010#2]") == ["doc:pak-neqs-2010#2"]     # non-breaking hyphens
+
+
+def test_non_breaking_hyphens_in_ids_and_numbers_pass(folder):
+    sources = agent.build_facts(folder)
+    answer = f"Lahore’s forecast for 2026‑10‑21 is 114.4 µg/m³ [row:{PRED_ID.replace('-', chr(0x2011))}]."
+    assert agent.check(answer, sources) == []
+
+
+def test_only_the_asked_city_gets_its_measured_days(folder):
+    a = make(folder, [])
+    ids = [f.id for f in a.select_facts("What was PM2.5 in Karachi?")]
+    assert not any(i.startswith("row:cityday|lahore") for i in ids)
+    assert any(i.startswith("row:pred|lahore") for i in ids)          # forecasts are always included
+
+
+def test_gpt_oss_citation_styles_are_understood(folder):
+    sources = agent.build_facts(folder)
+    for style in (f"【row:{PRED_ID}】", f"【row:{PRED_ID}†L1-L2】", f"(row:{PRED_ID})", f"row:{PRED_ID}", f"[[row:{PRED_ID}]]"):
+        assert agent.check(f"Lahore will be 114.4 µg/m³ {style}.", sources) == [], style
+    assert agent.check("Lahore will be 114.4 µg/m³ row:pred|lahore|99999999|x.", sources)   # unknown bare id still fails
+
+
+def test_rejected_answers_are_kept_for_the_log(folder):
+    a = make(folder, [f"Lahore will be 130 [row:{PRED_ID}].", "Lahore will be 131 [row:{PRED_ID}]."])
+    out = a.ask("Lahore tomorrow?", log=False)
+    assert len(out.rejected) == 2 and "130" in out.rejected[0]
+
+
+def test_rate_limit_switches_to_the_smaller_model(monkeypatch):
+    calls = []
+
+    class R:
+        def __init__(self, code, headers=None, body=None):
+            self.status_code, self.headers, self._body, self.text = code, headers or {}, body, ""
+
+        def json(self):
+            return self._body
+
+    def post(url, headers, timeout, json):
+        calls.append(json["model"])
+        if json["model"] != agent.FALLBACK_MODEL:
+            return R(429, {"retry-after": "120"})
+        return R(200, body={"choices": [{"message": {"content": "ok"}}]})
+
+    import requests
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setenv("GROQ_API_KEY", "test")
+    assert agent.groq_chat([{"role": "user", "content": "hi"}], model="openai/gpt-oss-120b") == "ok"
+    assert calls == ["openai/gpt-oss-120b", agent.FALLBACK_MODEL] and agent.last_model_used == agent.FALLBACK_MODEL

@@ -245,3 +245,14 @@ def test_scorecard_uses_the_evening_forecast():
     s = publish.scorecard(pred, daily)
     assert len(s) == 1 and s["row_id"].iloc[0] == "b"          # the 20:05 issue, not the later one
     assert s["status"].iloc[0] == "final" and s["error"].iloc[0] == 10.0
+
+
+def test_summary_page_uses_generated_numbers(trained):
+    import json
+    from smog import summary
+    tmp, _ = trained
+    out = summary.build()
+    assert out.startswith("wrote")
+    page = (tmp / "reports/Summary.html").read_text(encoding="utf-8")
+    m = json.loads((tmp / "reports/model_metrics.json").read_text())
+    assert str(m["test"]["improvement_vs_baseline_pct"]) in page and "I don't know" in page
