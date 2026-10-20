@@ -172,6 +172,8 @@ def test_chain_moves_on_when_a_model_is_rate_limited_and_remembers_it(monkeypatc
 
 
 def test_missing_keys_are_skipped(monkeypatch):
+    import dotenv
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)     # ignore a real .env on this computer
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "x")
     monkeypatch.setattr(agent.config, "load_yaml", lambda name: {})
