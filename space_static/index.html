@@ -132,7 +132,7 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left;verti
 th{font-weight:650}
 td.neg{color:var(--unhealthy);font-weight:650}
 .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:650;border:1.5px solid currentColor}
-.pill.ok{color:var(--good)}.pill.bad{color:var(--unhealthy)}
+.pill.ok{color:var(--good)}.pill.bad{color:var(--unhealthy)}.pill.warn{color:var(--usg)}
 select{padding:6px 10px;border-radius:6px;border:1.5px solid var(--ink);background:var(--sheet)}
 .bulletin{margin-top:28px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
 .bulletin h3{margin:0 0 4px;grid-column:1 / -1}
@@ -248,6 +248,11 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--rule);font-si
     <label>City <select id="city"></select></label>
     <div class="plot" id="p-history"></div>
     <div class="tablewrap" id="score"></div>
+    <h3>Is the model drifting?</h3>
+    <p class="lede muted">Checked in every hourly run. Inputs: the last 14 days against the same weeks last year, which the model
+    learned from (Population Stability Index). Accuracy: our live error on finished days against the error on the test month.</p>
+    <p class="lede" id="drift-head"></p>
+    <div class="tablewrap" id="drift"></div>
     <h3>Back-test on the locked test month</h3>
     <p class="lede" id="headline"></p>
     <div class="plot" id="p-backtest"></div>
@@ -271,6 +276,10 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--rule);font-si
     <div class="tablewrap" id="decisions"></div>
     <h3>How fresh each source is right now</h3>
     <div class="tablewrap" id="fresh"></div>
+    <h3>Checked against Punjab EPA reference stations</h3>
+    <p class="lede muted">Our city value comes mostly from low-cost sensors. Punjab EPA's own monitoring stations
+    (aqi.punjab.gov.pk) are the official reference. Spot check on the hours below; "difference" is ours minus the EPA station mean, in µg/m³.</p>
+    <div class="tablewrap" id="localval"></div>
     <h3>Hourly sensor readings by quality label</h3>
     <div class="tablewrap" id="counts"></div>
   </section>
@@ -380,8 +389,8 @@ function table(rows, cols, cellClass) {
 async function load() {
   const csv = ["predictions.csv", "city_daily.csv", "scorecard.csv", "freshness.csv", "quality_gates.csv",
     "quality_decisions.csv", "qc_status_counts.csv", "sensors.csv", "reports/test_predictions.csv",
-    "reports/validation_predictions.csv", "reports/test_errors_by_city.csv"];
-  const json = ["pipeline_status.json", "published.json", "reports/model_metrics.json", "reports/decision_metrics.json"];
+    "reports/validation_predictions.csv", "reports/test_errors_by_city.csv", "reports/local_validation.csv"];
+  const json = ["pipeline_status.json", "published.json", "reports/model_metrics.json", "reports/decision_metrics.json", "drift.json"];
   const [c, j, card, readme] = await Promise.all([
     Promise.all(csv.map(getCsv)), Promise.all(json.map(getJson)), getText("reports/MODEL_CARD.md"), getText("README.md")]);
   D = {}; csv.forEach((n, i) => D[n] = c[i]); json.forEach((n, i) => D[n] = j[i]);
@@ -581,6 +590,28 @@ function renderReport() {
     (k, v) => k === "improvement_pct" && v < 0 ? "neg" : "");
 }
 
+// ---------- drift monitor ----------
+function renderDrift() {
+  const d = D["drift.json"];
+  if (!d || !d.inputs) { $("drift-head").textContent = "The drift check appears after the next hourly run."; $("drift").innerHTML = ""; return; }
+  const cls = {ok: "ok", watch: "warn", drift: "bad"};
+  const pillOf = s => `<span class="pill ${cls[s] || ""}">${esc(s)}</span>`;
+  const p = d.performance || {};
+  const words = {ok: "No drift: inputs and accuracy look like what the model was tested on.",
+    watch: "Watch: something has moved; forecasts are still usable but read the table.",
+    drift: "Drift: conditions or accuracy have moved clearly; treat forecasts with extra caution and retrain."};
+  $("drift-head").innerHTML = `${pillOf(d.overall)} ${esc(words[d.overall] || "Not enough data yet to judge.")}
+    <span class="muted">Checked ${esc(pktStamp(parseTs(d.checked_utc)))}; recent ${esc(d.recent_window.join(" to "))},
+    reference ${esc(d.reference_window.join(" to "))}.</span>`;
+  const rows = d.inputs.map(r => ({check: r.input, "reference mean": r.reference_mean, "recent mean": r.recent_mean,
+    PSI: r.psi === null ? "–" : `${r.psi} (noise ${r.noise_floor})`, status: pillOf(r.status)}));
+  rows.push({check: `accuracy: live error on ${p.live_days || 0} finished days`,
+    "reference mean": p.test_mae === undefined ? "–" : `${p.test_mae} (test month)`,
+    "recent mean": p.live_mae === undefined ? "–" : `${p.live_mae} (same-as-today: ${p.live_persistence_mae ?? "–"})`,
+    PSI: p.ratio_to_test === undefined ? "–" : `×${p.ratio_to_test}`, status: pillOf(p.status)});
+  $("drift").innerHTML = table(rows);
+}
+
 // ---------- advisory rule ----------
 function renderRule() {
   const r = R(), thr = thrFor(r), rows = [];
@@ -621,6 +652,13 @@ function renderQuality() {
       "allowed (h)": r.limit_hours, status: `<span class="pill ${ok ? "ok" : "bad"}">${ok ? "fresh" : "stale"}</span>`};
   }));
   $("counts").innerHTML = table(D["qc_status_counts.csv"]);
+  const lv = D["reports/local_validation.csv"] || [];
+  $("localval").innerHTML = lv.length ? table(lv.map(r => ({...r, "time (PKT)": r.time_pkt,
+      source: `<span><a href="${esc(r.source_url)}" target="_blank" rel="noopener">report</a></span>`})),
+    ["time (PKT)", ["epa_stations", "EPA stations"], ["epa_mean", "EPA mean"], ["epa_range", "EPA range"],
+     ["ours_same_hour", "ours (same hour)"], ["our_sensors", "our sensors"], ["ours_24h_mean", "ours (24 h mean)"],
+     "difference", "ratio", "source"], (k, v) => k === "difference" && v < 0 ? "neg" : "")
+    : "<p class='muted'>Not run yet (<code>python -m smog validate-local</code>).</p>";
   $("modelcard").innerHTML = D.card ? marked.parse(D.card) : "The model card has not been published yet.";
   $("about").innerHTML = D.readme ? marked.parse(D.readme.replace(/^---[\s\S]*?---/, "")) : "";
   const key = r => `${r.city_id || ""}|${r.owner || "unknown"}|${r.provider || ""}`, counts = {};
@@ -633,7 +671,7 @@ function renderQuality() {
 }
 
 function renderAll() {
-  renderStatus(); renderAxis(); renderBoard(); renderEvolution(); renderReport(); renderRule(); renderQuality();
+  renderStatus(); renderAxis(); renderBoard(); renderEvolution(); renderReport(); renderDrift(); renderRule(); renderQuality();
 }
 
 // ---------- ask a question (Insight Agent hosted separately; keys never reach this page) ----------

@@ -43,6 +43,11 @@ Open-Meteo + CAMS┘     (never edited)   (verified every run)          (gate 1 
   misleading question: `config/agent_golden.yaml` (`python -m smog eval-agent` → `reports/agent_eval.csv` and
   `reports/agent_eval_summary.json` with answer accuracy, correct refusals and faithfulness).
 
+* **Drift monitor** (`src/smog/drift.py`, every hourly publish): inputs of the last 14 days vs the same weeks last year
+  (PSI minus its small-sample noise), and live error vs test error; dashboard panel + `data/logs/drift_log.csv`.
+* **Local validation** (`src/smog/local_validation.py`): Lahore value vs Punjab EPA reference stations for the same hour
+  (`config/punjab_epa_reference.csv`, sources linked per row; add rows from aqi.punjab.gov.pk and re-run).
+
 ## Hosting
 
 * **Dashboard:** free static Hugging Face Space (`python -m smog deploy-space`). It reads the public dataset in the
@@ -80,6 +85,7 @@ cp .env.example .env        # Windows: copy .env.example .env
 | `python -m smog deploy-space` | create/update the static dashboard Space |
 | `python -m smog ask "..."` | ask the Insight Agent |
 | `python -m smog agent-ui` | local web page for the agent (http://127.0.0.1:8000) |
+| `python -m smog validate-local` | compare our Lahore values with Punjab EPA reference stations → `reports/LOCAL_VALIDATION.md` |
 | `python -m smog eval-agent` | run the 22-question golden set → `reports/agent_eval.csv` + `agent_eval_summary.json` |
 | `python -m smog export-runs` | Prefect run history for the evaluation window → `prefect_runs.csv` |
 | `make test` / `python -m pytest -q` | unit tests (no network, no keys needed) |

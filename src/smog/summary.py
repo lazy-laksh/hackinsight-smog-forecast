@@ -71,6 +71,14 @@ def build() -> str:
     weak = (f"{', '.join(losers)} {'does' if len(losers) == 1 else 'do'} not beat persistence on the test month"
             if losers else "every city beats persistence on the test month")
     success = m["declared_success"]
+    lv = _load("local_validation.csv")
+    local = ""
+    if lv is not None and lv["difference"].notna().any():
+        ok = lv.dropna(subset=["difference"])
+        diff = ok["difference"].mean()
+        local = (f" Checked against Punjab EPA reference stations on {len(ok)} hours: our Lahore value was on average "
+                 f"{abs(diff):.0f} µg/m³ {'higher' if diff > 0 else 'lower'} than the EPA station mean "
+                 f"(ratio {ok['ratio'].mean():.2f}).")
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Summary - Next-day smog forecast for Pakistan</title>
 <style>
 @page {{ size: A4; margin: 12mm 13mm; }}
@@ -123,12 +131,14 @@ false alarm. Replayed on days the model never trained on:</p><ul>{rule}</ul>
 main reasons (smog already in the air, weather, fires, season) and an Urdu advisory to forward.</p>
 <h2>Insight Agent (RAG)</h2>
 <p>Retrieves from cited official sources (WHO 2021, US EPA AQI 2024, Pakistan NEQS 2010, Punjab EPD and P&amp;D,
-school instructions 2026) and from data facts built by code from gold rows. A Groq LLM answers; our code then
-checks every citation id and every number against the sources, retries once, and otherwise answers
-<i>"I don't know based on my sources."</i> English and Urdu. Golden set: {agent} passed.</p>
+school instructions 2026) and from data facts built by code from gold rows. An LLM (Groq gpt-oss, Gemini fallback)
+answers; our code then checks every citation id and every number against the sources, retries once, and otherwise
+answers <i>"I don't know based on my sources."</i> Personal details are removed before the model sees a question;
+health questions always get a "call Rescue 1122" note. English and Urdu. Golden set: {agent} passed.</p>
 <h2>Dashboard and operations</h2>
 <p>Free static Hugging Face Space reading the hourly published dataset: last successful run, data freshness,
-quality gates, forecasts, live "were we right?" report card, back-test, advisory replay, model card.</p>
+quality gates, forecasts, live "were we right?" report card, drift monitor (inputs vs the same weeks last year,
+live error vs test error, every run), back-test, advisory replay, model card.{local}</p>
 <h2>Business model and impact</h2>
 <p>Free public dashboard and Urdu bulletin; paid decision service (alerts at the user's own threshold, API, more
 cities) for district administrations, school networks, hospitals and employers of outdoor workers. Running cost:

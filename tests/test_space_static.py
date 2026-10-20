@@ -39,3 +39,9 @@ def test_missing_probability_is_never_shown_as_no_advisory():
 def test_markers_follow_the_theme_colour():
     html = (config.ROOT / "space_static/index.html").read_text(encoding="utf-8")
     assert 'color: "#111827"}' not in html            # black markers vanish on the dark theme
+
+
+def test_page_shows_drift_and_local_validation():
+    html = (config.ROOT / "space_static/index.html").read_text(encoding="utf-8")
+    assert '"drift.json"' in html and "renderDrift()" in html
+    assert "reports/local_validation.csv" in html and 'id="localval"' in html

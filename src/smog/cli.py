@@ -132,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=8000)
     ui.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to accept visitors from outside (hosting)")
     sub.add_parser("agent-models", help="list the chat models your Groq/Gemini keys can use, and the order they are tried")
+    sub.add_parser("validate-local", help="compare our Lahore values with Punjab EPA reference stations -> reports/")
     sub.add_parser("summary", help="write reports/Summary.html (all numbers from reports/), then print it to PDF")
     sub.add_parser("eval-agent", help="run the Insight Agent on the golden question set, write reports/agent_eval.csv")
     space = sub.add_parser("deploy-space", help="create or update the Hugging Face Space (the dashboard)")
@@ -201,6 +202,10 @@ def main(argv: list[str] | None = None) -> int:
         for name, models in agent.list_models().items():
             print(f"{name}: " + ", ".join(models))
         print("chain tried in this order: " + " -> ".join(f"{p['name']}:{m}" for p in agent.providers() for m in p["models"]))
+        return 0
+    if args.command == "validate-local":
+        from smog import local_validation
+        print(local_validation.run())
         return 0
     if args.command == "summary":
         from smog import summary

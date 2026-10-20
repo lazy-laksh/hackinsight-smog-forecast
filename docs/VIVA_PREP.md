@@ -143,6 +143,19 @@ prompt version produced it; and the public server allows 8 questions per minute 
 A static page is visible to everyone, so the key would leak. The agent runs on a small server (Render) that keeps keys
 as secrets, with a per-visitor rate limit.
 
+**29b. How do you know if the model stops working (drift)?**
+Every hourly run compares the last 14 days of inputs (PM2.5, wind, mixing height, humidity, fires) with the same weeks
+last year, which the model learned from, using PSI; and compares our live error on finished days with the test-month
+error. Same weeks last year, not last month, because smog is seasonal: October always looks different from September.
+PSI is noisy with only 56 values, so we subtract its expected noise before applying the usual 0.10 / 0.25 limits.
+The dashboard shows ok / watch / drift, and every check is logged in `data/logs/drift_log.csv`. (*) read today's status.
+
+**29c. Did you validate against Pakistani official data?**
+Yes, as a spot check: Punjab EPA's own government stations in Lahore publish hourly PM2.5 on aqi.punjab.gov.pk.
+We compared their station mean with our sensor-based city value for the same hours (`reports/LOCAL_VALIDATION.md`).
+(*) read the average difference. It is only a few hours, and EPA stations sit in different places than our sensors,
+so it is a check, not a correction; a systematic gap would be a reason to calibrate the low-cost sensors.
+
 ## Business, impact, honesty
 **30. Who would pay?**
 District administrations, school networks, hospitals and employers of outdoor workers, for alerts at their own

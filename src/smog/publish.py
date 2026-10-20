@@ -23,7 +23,7 @@ from smog import config, warehouse
 
 PUBLISH_DIR_NAME = "data/publish"
 DEFAULT_REPO_NAME = "smog-forecast-live"
-REPORT_FILES = ("model_metrics.json", "decision_metrics.json", "test_errors_by_city.csv",
+REPORT_FILES = ("model_metrics.json", "decision_metrics.json", "test_errors_by_city.csv", "local_validation.csv",
                 "validation_errors_by_city_and_season.csv", "test_predictions.csv",
                 "validation_predictions.csv", "MODEL_CARD.md")
 EVENING_ISSUE_HOUR_PKT = 20      # the "official" forecast is the one issued at 20:05 PKT (as in training)
@@ -73,6 +73,20 @@ def scorecard(pred: pd.DataFrame, daily: pd.DataFrame) -> pd.DataFrame:
     return out[[c for c in cols if c in out.columns]].sort_values(["target_day_pkt", "city_id"], ascending=[False, True])
 
 
+def drift_report(score: pd.DataFrame | None, now: datetime) -> dict:
+    """Drift check on the full history in the warehouse (the published files only keep 120 days)."""
+    from smog import drift
+    since = now.date() - timedelta(days=365 + drift.REFERENCE_HALF_WIDTH + 2)
+    with warehouse.connect(read_only=True) as con:
+        tables = {t: _query(con, f"SELECT * FROM gold.{t} WHERE day_pkt >= ?", since)
+                  for t in ("city_daily", "weather_daily", "fires_daily")}
+    metrics_path = config.ROOT / "reports/model_metrics.json"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.exists() else None
+    result = drift.report(tables, score if score is not None else pd.DataFrame(), metrics, now)
+    drift.log(result)
+    return result
+
+
 def export(now: datetime | None = None) -> dict[str, int]:
     now = now or datetime.now(timezone.utc)
     folder = publish_dir()
@@ -100,6 +114,12 @@ def export(now: datetime | None = None) -> dict[str, int]:
         files["sensors.csv"] = _query(con, "SELECT * FROM cleaned.sensors")
     if "error" not in files["predictions.csv"] and "error" not in files["city_daily.csv"]:
         files["scorecard.csv"] = scorecard(files["predictions.csv"], files["city_daily.csv"])
+
+    try:      # drift monitor: never allowed to stop the publish
+        files_drift = drift_report(files.get("scorecard.csv"), now)
+        (folder / "drift.json").write_text(json.dumps(files_drift, indent=2, default=str), encoding="utf-8")
+    except Exception as error:
+        (folder / "drift.json").write_text(json.dumps({"overall": "not checked", "error": str(error)[:200]}), encoding="utf-8")
 
     counts = {}
     for name, df in files.items():
