@@ -1,0 +1,7 @@
+# Only what the hosted Insight Agent needs (the full pipeline uses requirements.txt).
+requests>=2.31
+python-dotenv>=1.0
+PyYAML>=6.0
+pandas>=2.2
+scikit-learn>=1.5
+huggingface_hub>=0.25

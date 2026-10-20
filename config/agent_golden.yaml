@@ -1,0 +1,84 @@
+# Golden evaluation set for the Insight Agent: run with `python -m smog eval-agent`.
+# expect: answer = must answer with citations; idk = must say "I don't know".
+# cite: an id prefix that at least one citation must start with. must_include: exact text in the answer.
+questions:
+  - id: forecast-lahore
+    question: What is tomorrow's PM2.5 forecast for Lahore?
+    expect: answer
+    cite: ["row:pred|lahore"]
+  - id: advisory-peshawar
+    question: Should the Peshawar environment officer issue a smog advisory for tomorrow?
+    expect: answer
+    cite: ["row:pred|peshawar"]
+  - id: why-lahore
+    question: Why is the forecast for Lahore high?
+    expect: answer
+    cite: ["row:pred|lahore"]
+  - id: highest-city
+    question: Which of the four cities has the highest forecast for tomorrow?
+    expect: answer
+    cite: ["row:pred|"]
+  - id: yesterday-karachi
+    question: What was the measured PM2.5 in Karachi over the last few days?
+    expect: answer
+    cite: ["row:cityday|karachi"]
+  - id: freshness
+    question: Is the data behind the forecast fresh right now?
+    expect: answer
+    cite: ["row:freshness|"]
+  - id: accuracy
+    question: How accurate is the model compared with simply assuming tomorrow equals today?
+    expect: answer
+    cite: ["report:model_metrics"]
+  - id: karachi-weakness
+    question: Is the model better than persistence in Karachi?
+    expect: answer
+    cite: ["report:test_errors|karachi"]
+  - id: who-guideline
+    question: What is the WHO 24-hour guideline level for PM2.5?
+    expect: answer
+    cite: ["doc:who-aqg-2021"]
+    must_include: ["15"]
+  - id: neqs
+    question: What is Pakistan's national 24-hour PM2.5 standard?
+    expect: answer
+    cite: ["doc:pak-neqs-2010"]
+    must_include: ["35"]
+  - id: unhealthy-line
+    question: From what PM2.5 level is a day called unhealthy, and why that number?
+    expect: answer
+    cite: ["doc:epa-aqi-2024"]
+    must_include: ["55.5"]
+  - id: stuck-sensors
+    question: How does the data quality agent deal with stuck sensors?
+    expect: answer
+    cite: ["doc:project-methods"]
+  - id: schools
+    question: What did the Punjab government tell schools to do about smog this year?
+    expect: answer
+    cite: ["doc:punjab-schools-2026"]
+  - id: health-advice
+    question: Who should avoid heavy exertion on an unhealthy day?
+    expect: answer
+    cite: ["doc:epa-health-messages"]
+  - id: urdu-lahore
+    question: کل لاہور میں پی ایم 2.5 کتنا ہو گا؟
+    expect: answer
+    lang: ur
+    cite: ["row:pred|lahore"]
+  - id: idk-multan
+    question: What is the PM2.5 forecast for Multan tomorrow?
+    expect: idk
+  - id: idk-next-month
+    question: What will Lahore's PM2.5 be on 15 December?
+    expect: idk
+  - id: idk-cricket
+    question: Who will win the next Pakistan cricket match?
+    expect: idk
+  - id: idk-medicine
+    question: Which medicine should I take for smog cough?
+    expect: idk
+  - id: idk-urdu-cricket
+    question: کل کرکٹ میچ کون جیتے گا؟
+    expect: idk
+    lang: ur

@@ -130,7 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("question", nargs="+")
     ui = sub.add_parser("agent-ui", help="open a local web page to chat with the Insight Agent")
     ui.add_argument("--port", type=int, default=8000)
-    sub.add_parser("agent-models", help="list the Groq chat models this account can use")
+    ui.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to accept visitors from outside (hosting)")
+    sub.add_parser("agent-models", help="list the chat models your Groq/Gemini keys can use, and the order they are tried")
     sub.add_parser("summary", help="write reports/Summary.html (all numbers from reports/), then print it to PDF")
     sub.add_parser("eval-agent", help="run the Insight Agent on the golden question set, write reports/agent_eval.csv")
     space = sub.add_parser("deploy-space", help="create or update the Hugging Face Space (the dashboard)")
@@ -197,9 +198,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "agent-models":
         from smog import agent
-        models = agent.groq_models()
-        print("\n".join(models))
-        print(f"-> the agent would use: {agent.pick_model(models)}")
+        for name, models in agent.list_models().items():
+            print(f"{name}: " + ", ".join(models))
+        print("chain tried in this order: " + " -> ".join(f"{p['name']}:{m}" for p in agent.providers() for m in p["models"]))
         return 0
     if args.command == "summary":
         from smog import summary
@@ -207,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "agent-ui":
         from smog import agent_ui
-        agent_ui.serve(args.port)
+        agent_ui.serve(args.port, args.host)
         return 0
     if args.command == "eval-agent":
         from smog import agent

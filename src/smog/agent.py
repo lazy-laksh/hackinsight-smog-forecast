@@ -35,8 +35,6 @@ from smog import config
 
 IDK_EN = "I don't know based on my sources."
 IDK_UR = "میرے ذرائع کی بنیاد پر میں یہ نہیں جانتا۔"
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
 TOP_K = 4
 UNHEALTHY = 55.5
 CITY_NAMES = {"lahore": "Lahore", "islamabad_rawalpindi": "Islamabad/Rawalpindi",
@@ -58,7 +56,10 @@ Answer ONLY from the SOURCES in the user message. Rules:
    This applies to other cities, to dates other than those in the SOURCES, and to unrelated topics. Do not guess.
 4. Answer in the language of the question. For Urdu, write Urdu text but keep numbers in 0-9 digits and keep
    citations unchanged.
-5. Be brief: at most 5 sentences. Do not give medical advice beyond what the SOURCES say."""
+5. Style: start with a one-sentence direct answer, then at most 3 short sentences with the key supporting
+   numbers. Write in plain words for a district environment officer, no headings or bullet lists. When asked why a
+   forecast is high or low, name the main reasons and their effects from the source. Do not give medical advice
+   beyond what the SOURCES say."""
 
 
 # --- Sources ---------------------------------------------------------------------------------------
@@ -96,7 +97,7 @@ def load_documents(root: Path | None = None) -> list[Source]:
         for n, part in enumerate(parts, start=1):
             text = re.sub(r"\s+", " ", part.lstrip("#").strip())
             if len(text) > 40:
-                chunks.append(Source(f"doc:{doc_id}#{n}", text[:1500], title, url))
+                chunks.append(Source(f"doc:{doc_id}#{n}", text[:900], title, url))
     return chunks
 
 
@@ -277,81 +278,97 @@ def check(answer: str, sources: list[Source], question: str = "") -> list[str]:
 
 # --- The language model ----------------------------------------------------------------------------
 
-# Preference order if the configured model is not available to this account (checked against /models).
-PREFERRED_MODELS = ("llama-3.3-70b-versatile", "openai/gpt-oss-120b", "moonshotai/kimi-k2-instruct",
-                    "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-20b",
-                    "meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.1-8b-instant")
-NOT_CHAT = ("whisper", "guard", "tts", "orpheus", "playai", "compound", "prompt-guard", "distil")
-_chosen_model: str | None = None
+# --- Language models: a chain of free, OpenAI-compatible providers ----------------------------------
+# Tried in order. A provider whose key is missing is skipped; a model that is rate-limited for longer than
+# MAX_WAIT_S is skipped (and remembered as busy) so the user never waits minutes. Every answer, from any
+# model, goes through the same citation and number checks. The chain lives in config/agent.yaml.
+DEFAULT_PROVIDERS = [
+    {"name": "groq", "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY",
+     "models": ["openai/gpt-oss-120b"]},
+    {"name": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "key_env": "GEMINI_API_KEY",
+     "models": ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash"]},
+    {"name": "groq", "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY",
+     "models": ["openai/gpt-oss-20b"]},
+]
+NOT_CHAT = ("whisper", "guard", "tts", "orpheus", "playai", "compound", "prompt-guard", "distil", "embedding",
+            "image", "veo", "imagen", "audio", "live")
+MAX_WAIT_S = 30                         # wait at most this long for a rate limit before moving down the chain
+last_model_used: str | None = None      # which model wrote the latest answer (shown in logs and the eval)
+_busy_until: dict[str, float] = {}      # "provider:model" -> time when its rate limit should be over
+_missing: set[str] = set()              # "provider:model" pairs the provider says do not exist
 
 
-def _groq_key() -> str:
+def providers() -> list[dict]:
     from dotenv import load_dotenv
     load_dotenv(config.ROOT / ".env")
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        raise RuntimeError("GROQ_API_KEY is not set in .env")
-    return key
+    chain = (config.load_yaml("agent") or {}).get("providers") or DEFAULT_PROVIDERS
+    return [p for p in chain if os.getenv(p["key_env"])]
 
 
-def groq_models() -> list[str]:
-    """Chat models this Groq account can use right now."""
+def list_models() -> dict[str, list[str]]:
+    """Chat models each configured provider offers to this account (python -m smog agent-models)."""
     import requests
-    r = requests.get(GROQ_URL.replace("/chat/completions", "/models"),
-                     headers={"Authorization": f"Bearer {_groq_key()}"}, timeout=30)
-    r.raise_for_status()
-    ids = [m["id"] for m in r.json().get("data", []) if m.get("active", True)]
-    return sorted(i for i in ids if not any(word in i.lower() for word in NOT_CHAT))
+    out = {}
+    for p in providers():
+        try:
+            r = requests.get(p["base_url"].rstrip("/") + "/models",
+                             headers={"Authorization": f"Bearer {os.environ[p['key_env']]}"}, timeout=30)
+            r.raise_for_status()
+            ids = [m["id"].removeprefix("models/") for m in r.json().get("data", [])]
+            out[p["name"]] = sorted(i for i in ids if not any(w in i.lower() for w in NOT_CHAT))
+        except Exception as error:
+            out[p["name"]] = [f"(could not list: {error})"]
+    return out
 
 
-def pick_model(available: list[str]) -> str:
-    for name in PREFERRED_MODELS:
-        if name in available:
-            return name
-    if not available:
-        raise RuntimeError("this Groq account has no chat models available")
-    return available[0]
-
-
-FALLBACK_MODEL = "openai/gpt-oss-20b"   # smaller model with its own rate limit, used only if the main one is busy
-MAX_WAIT_S = 15                         # wait at most this long for a rate limit before switching
-last_model_used: str | None = None      # which model wrote the latest answer (shown in logs and the eval)
-
-
-def groq_chat(messages: list[dict], model: str | None = None, max_tokens: int = 1500) -> str:
+def llm_chat(messages: list[dict], max_tokens: int = 1500) -> str:
     import requests
-    global _chosen_model, last_model_used
-    key = _groq_key()
-    model = model or _chosen_model or os.getenv("GROQ_MODEL") or (config.load_yaml("agent") or {}).get("model") or DEFAULT_MODEL
-    for attempt in range(6):
-        body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
-        # gpt-oss thinks before answering; that hidden reasoning counts toward max_tokens, hence 1500.
-        # ("low" reasoning made it ignore the citation format more often, so the default is kept.)
-        r = requests.post(GROQ_URL, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
-        if r.status_code == 404 and "model" in r.text and attempt == 0:
-            # The configured model is not available to this account: pick one that is, and say so.
-            model = _chosen_model = pick_model(groq_models())
-            print(f"(note: using Groq model '{model}' because the configured one is not available)")
-            continue
-        if r.status_code == 429 and attempt < 5:
-            wait = float(r.headers.get("retry-after", 2 ** attempt))
-            if wait > MAX_WAIT_S and model != FALLBACK_MODEL:
-                # Free-tier limit reached: rather than make the user wait minutes, answer with the
-                # smaller model now. The same citation and number checks apply to its answer.
-                print(f"(note: {model} is rate-limited for {wait:.0f}s; using {FALLBACK_MODEL} for this answer)")
-                model = FALLBACK_MODEL
+    global last_model_used
+    chain = providers()
+    if not chain:
+        raise RuntimeError("no language model key found: put GROQ_API_KEY and/or GEMINI_API_KEY in .env")
+    problems = []
+    for p in chain:
+        key = os.environ[p["key_env"]]
+        for model in p["models"]:
+            tag = f"{p['name']}:{model}"
+            if tag in _missing or _busy_until.get(tag, 0) > time.time():
                 continue
-            time.sleep(min(wait, 60))
-            continue
-        if r.status_code in (500, 502, 503) and attempt < 5:
-            time.sleep(2 ** attempt)
-            continue
-        if r.status_code >= 400:
-            raise RuntimeError(f"Groq API error {r.status_code}: {r.text[:300]}")
-        last_model_used = model
-        text = r.json()["choices"][0]["message"]["content"] or ""
-        return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()     # some models show their reasoning
-    raise RuntimeError("Groq API kept failing (rate limit); try again in a minute")
+            for attempt in range(4):
+                body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
+                try:
+                    r = requests.post(p["base_url"].rstrip("/") + "/chat/completions", timeout=90, json=body,
+                                      headers={"Authorization": f"Bearer {key}"})
+                except requests.RequestException as error:
+                    problems.append(f"{tag}: {error}")
+                    break
+                if r.status_code == 404:
+                    _missing.add(tag)
+                    problems.append(f"{tag}: model not available")
+                    break
+                if r.status_code == 429:
+                    wait = float(r.headers.get("retry-after", 2 ** attempt * 5))
+                    if wait > MAX_WAIT_S or attempt == 3:
+                        _busy_until[tag] = time.time() + wait
+                        print(f"(note: {tag} is rate-limited for {wait:.0f}s; trying the next model)")
+                        problems.append(f"{tag}: rate-limited")
+                        break
+                    time.sleep(wait)
+                    continue
+                if r.status_code in (500, 502, 503) and attempt < 3:
+                    time.sleep(2 ** attempt)
+                    continue
+                if r.status_code >= 400:
+                    problems.append(f"{tag}: HTTP {r.status_code} {r.text[:150]}")
+                    break
+                text = (r.json()["choices"][0]["message"].get("content") or "")
+                last_model_used = tag
+                return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()   # some models show their reasoning
+    raise RuntimeError("every language model is busy or unavailable right now (" + "; ".join(problems[-3:]) +
+                       "). Try again in a few minutes.")
+
+
+groq_chat = llm_chat        # old name, kept so earlier scripts keep working
 
 
 # --- The agent -------------------------------------------------------------------------------------
@@ -374,23 +391,51 @@ class Answer:
 class InsightAgent:
     def __init__(self, folder: Path | None = None, llm: Callable[[list[dict]], str] | None = None,
                  root: Path | None = None):
-        self.llm = llm or groq_chat
+        self.llm = llm or llm_chat
         self.docs = load_documents(root)
         self.retriever = Retriever(self.docs)
+        self.fixed_folder = folder
         self.facts = build_facts(folder or data_folder())
+        self.loaded_at = time.time()
+
+    REFRESH_S = 600
+
+    def refresh(self) -> None:
+        """When reading the live dataset, pick up the newest hourly results (at most every 10 minutes)."""
+        if self.fixed_folder is None and os.getenv("AGENT_DATA_DIR") is None and time.time() - self.loaded_at > self.REFRESH_S:
+            try:
+                self.facts = build_facts(data_folder())
+            except Exception as error:             # keep answering from the last good copy
+                print(f"(note: could not refresh the published data: {error})")
+            self.loaded_at = time.time()
 
     CITY_WORDS = {"lahore": ("lahore", "لاہور"), "karachi": ("karachi", "کراچی"), "peshawar": ("peshawar", "پشاور"),
                   "islamabad_rawalpindi": ("islamabad", "rawalpindi", "pindi", "اسلام آباد", "راولپنڈی")}
 
+    TOPICS = {   # fact groups that are only sent when the question is about them (keeps prompts small)
+        "status": ("row:freshness|", "row:pipeline_status",
+                   ("fresh", "stale", "data", "update", "run", "pipeline", "latest", "current", "now", "quality", "source")),
+        "skill": ("report:",
+                  ("accura", "error", "test", "baseline", "persistence", "model", "better", "worse", "reliab", "trust",
+                   "mae", "good is", "how good", "perform", "skill", "wrong", "right")),
+    }
+
     def select_facts(self, text: str) -> list[Source]:
-        """All forecasts, status and test results, but measured days only for the cities asked about
-        (all cities, last 3 days, if none is named). Keeps the prompt short and the model focused."""
+        """Tomorrow's forecasts always; measured days only for the cities asked about (all cities, last 3 days,
+        if none is named); run status and test results only when the question is about them.
+        Smaller prompts mean faster answers, fewer rate limits and a more focused model."""
         low = text.lower()
         named = [c for c, words in self.CITY_WORDS.items() if any(w in low for w in words)]
+        wanted = {name for name, (*_, words) in self.TOPICS.items() if any(w in low for w in words)}
         out = []
         for f in self.facts:
+            topic = next((name for name, (*prefixes, _) in self.TOPICS.items()
+                          if any(f.id.startswith(p) for p in prefixes)), None)
+            if topic and topic not in wanted:
+                continue
             if f.id.startswith("row:cityday|"):
-                _, city, day = f.id.split("|")
+                parts = f.id.split("|") + ["", ""]
+                city, day = parts[1], parts[2]
                 if named and city not in named:
                     continue
                 if not named and day < self._recent_cutoff:
@@ -400,7 +445,7 @@ class InsightAgent:
 
     @property
     def _recent_cutoff(self) -> str:
-        days = sorted({f.id.split("|")[2] for f in self.facts if f.id.startswith("row:cityday|")})
+        days = sorted({(f.id.split("|") + ["", ""])[2] for f in self.facts if f.id.startswith("row:cityday|")})
         return days[-3] if len(days) >= 3 else ""
 
     @staticmethod
@@ -408,6 +453,7 @@ class InsightAgent:
         return bool(re.search(r"[؀-ۿ]", text))
 
     def ask(self, question: str, log: bool = True) -> Answer:
+        self.refresh()
         start = time.time()
         urdu = self.is_urdu(question)
         idk = IDK_UR if urdu else IDK_EN

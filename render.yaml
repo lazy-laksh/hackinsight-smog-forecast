@@ -1,0 +1,22 @@
+# Render "Blueprint": hosts the Insight Agent for free so the dashboard's Ask tab can reach it.
+# Render dashboard -> New -> Blueprint -> pick this GitHub repo. Then paste the keys when asked
+# (they are stored as secrets on Render, never in this file or in GitHub).
+services:
+  - type: web
+    name: smog-insight-agent
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-agent.txt
+    startCommand: python -m smog.agent_ui --host 0.0.0.0
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONPATH
+        value: src
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: HF_DATASET_REPO
+        value: lazypanda21/smog-forecast-live
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

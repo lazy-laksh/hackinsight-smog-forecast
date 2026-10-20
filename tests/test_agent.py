@@ -110,10 +110,6 @@ def test_golden_set_is_well_formed():
     assert len({q["id"] for q in qs}) == len(qs)
 
 
-def test_model_fallback_prefers_strong_chat_models():
-    assert agent.pick_model(["llama-3.1-8b-instant", "openai/gpt-oss-120b"]) == "openai/gpt-oss-120b"
-    assert agent.pick_model(["some-new-model"]) == "some-new-model"
-
 
 def test_citation_parsing_handles_model_habits():
     assert agent.cited_ids("x [doc:a#1, doc:b#2] y [row:p|l|1; report:m]") == ["doc:a#1", "doc:b#2", "row:p|l|1", "report:m"]
@@ -146,7 +142,7 @@ def test_rejected_answers_are_kept_for_the_log(folder):
     assert len(out.rejected) == 2 and "130" in out.rejected[0]
 
 
-def test_rate_limit_switches_to_the_smaller_model(monkeypatch):
+def test_chain_moves_on_when_a_model_is_rate_limited_and_remembers_it(monkeypatch):
     calls = []
 
     class R:
@@ -156,14 +152,35 @@ def test_rate_limit_switches_to_the_smaller_model(monkeypatch):
         def json(self):
             return self._body
 
-    def post(url, headers, timeout, json):
+    def post(url, timeout, json, headers):
         calls.append(json["model"])
-        if json["model"] != agent.FALLBACK_MODEL:
+        if json["model"] == "big":
             return R(429, {"retry-after": "120"})
         return R(200, body={"choices": [{"message": {"content": "ok"}}]})
 
     import requests
     monkeypatch.setattr(requests, "post", post)
-    monkeypatch.setenv("GROQ_API_KEY", "test")
-    assert agent.groq_chat([{"role": "user", "content": "hi"}], model="openai/gpt-oss-120b") == "ok"
-    assert calls == ["openai/gpt-oss-120b", agent.FALLBACK_MODEL] and agent.last_model_used == agent.FALLBACK_MODEL
+    monkeypatch.setattr(agent, "_busy_until", {})
+    monkeypatch.setattr(agent, "providers", lambda: [
+        {"name": "a", "base_url": "http://x", "key_env": "K", "models": ["big"]},
+        {"name": "b", "base_url": "http://y", "key_env": "K", "models": ["small"]}])
+    monkeypatch.setenv("K", "test")
+    assert agent.llm_chat([{"role": "user", "content": "hi"}]) == "ok"
+    assert calls == ["big", "small"] and agent.last_model_used == "b:small"
+    agent.llm_chat([{"role": "user", "content": "again"}])
+    assert calls[-1] == "small" and calls.count("big") == 1          # the busy model is skipped, no extra wait
+
+
+def test_missing_keys_are_skipped(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "x")
+    monkeypatch.setattr(agent.config, "load_yaml", lambda name: {})
+    names = [p["name"] for p in agent.providers()]
+    assert "gemini" not in names and "groq" in names
+
+
+def test_status_and_skill_facts_are_sent_only_when_asked(folder):
+    a = make(folder, [])
+    plain = [f.id for f in a.select_facts("What is tomorrow's forecast for Lahore?")]
+    assert not any(i.startswith(("row:freshness|", "report:")) for i in plain)
+    assert any(i.startswith("row:freshness|") for i in [f.id for f in a.select_facts("Is the data fresh?")])

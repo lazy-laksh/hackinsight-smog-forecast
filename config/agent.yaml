@@ -1,0 +1,19 @@
+# Insight Agent settings. No secrets here: keys live only in .env (or the host's secret settings).
+data_repo: lazypanda21/smog-forecast-live   # public dataset the hourly pipeline publishes to
+
+# Language models, tried in this order (all speak the OpenAI chat format). A provider whose key is not set
+# is skipped; a model that is rate-limited is skipped until its limit ends. The same checks apply to all.
+# See which models your keys can use: python -m smog agent-models
+providers:
+  - name: groq
+    base_url: https://api.groq.com/openai/v1
+    key_env: GROQ_API_KEY
+    models: [openai/gpt-oss-120b]
+  - name: gemini
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    key_env: GEMINI_API_KEY
+    models: [gemini-3.8-flash, gemini-3.5-flash, gemini-2.5-flash]
+  - name: groq
+    base_url: https://api.groq.com/openai/v1
+    key_env: GROQ_API_KEY
+    models: [openai/gpt-oss-20b]
