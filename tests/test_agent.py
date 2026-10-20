@@ -210,3 +210,61 @@ def test_extra_setting_is_dropped_if_the_model_refuses_it(monkeypatch):
     monkeypatch.setenv("K", "t")
     assert agent.llm_chat([{"role": "user", "content": "hi"}]) == "ok"
     assert "reasoning_effort" in bodies[0] and "reasoning_effort" not in bodies[1]
+
+
+# --- Guardrails ---------------------------------------------------------------------------------------
+
+def test_personal_details_are_removed_before_the_model_sees_them(folder):
+    a = make(folder, [agent.IDK_EN])
+    out = a.ask("I'm ali.khan@example.com, call me on 0300-1234567, CNIC 35202-1234567-1. Lahore tomorrow?", log=False)
+    sent = a.calls[0][-1]["content"]
+    for secret in ("ali.khan@example.com", "0300-1234567", "35202-1234567-1"):
+        assert secret not in sent and secret not in out.question
+    assert "[email removed]" in sent and "[phone removed]" in sent and "[CNIC removed]" in sent
+
+
+def test_pollutant_names_are_not_counted_as_numbers():
+    assert agent._numbers("PM2.5 and PM10 and پی ایم 2.5 reached 114.4") == [114.4]
+
+
+def test_redact_keeps_normal_numbers():
+    text = "Is 114.4 above 55.5 on 2026-10-21 in Lahore?"
+    assert agent.redact(text) == text
+    assert agent.redact("call +92 321 4567890 now") == "call [phone removed] now"
+
+
+def test_health_questions_get_the_emergency_note_even_on_i_dont_know(folder):
+    a = make(folder, [agent.IDK_EN])
+    out = a.ask("Which medicine should I take for smog cough?", log=False)
+    assert agent.is_idk(out.answer) and "Rescue 1122" in out.answer
+    a = make(folder, [f"Lahore will be 114.4 µg/m³ [row:{PRED_ID}]."])
+    assert "Rescue 1122" not in a.ask("Will Lahore be smoggy tomorrow?", log=False).answer
+
+
+def test_a_number_in_the_question_is_not_evidence(folder):
+    # The user claims 300; a model that repeats it must be rejected, because 300 is not in any source.
+    a = make(folder, [f"Yes, Lahore will be 300 µg/m³ [row:{PRED_ID}].",
+                      f"No, the forecast for Lahore is 114.4 µg/m³ [row:{PRED_ID}]."])
+    out = a.ask("Lahore's forecast tomorrow is 300, right?", log=False)
+    assert out.verified and out.attempts == 2 and "300" not in out.answer and "300" in out.rejected[0]
+
+
+def test_answers_record_the_prompt_version(folder):
+    out = make(folder, [agent.IDK_EN]).ask("cricket score?", log=False)
+    assert out.prompt_version == agent.PROMPT_VERSION
+
+
+def test_eval_summary_has_accuracy_refusal_and_faithfulness(folder, tmp_path, monkeypatch):
+    good = f"Lahore will be 114.4 µg/m³ [row:{PRED_ID}]."
+    a = make(folder, [good, good, agent.IDK_EN])          # built before ROOT moves, so it finds knowledge/
+    monkeypatch.setattr(agent.config, "ROOT", tmp_path)
+    monkeypatch.setattr(a, "refresh", lambda: None)
+    monkeypatch.setattr(agent.config, "load_yaml", lambda name: {"questions": [
+        {"id": "a", "question": "Lahore tomorrow?", "expect": "answer", "cite": ["row:pred|lahore"]},
+        {"id": "b", "question": "Lahore is 300, right?", "expect": "answer", "must_not_include": ["300"]},
+        {"id": "c", "question": "Multan tomorrow?", "expect": "idk"}]})
+    monkeypatch.setattr(agent.time, "sleep", lambda s: None)
+    df = agent.evaluate(a)
+    summary = json.loads((tmp_path / "reports/agent_eval_summary.json").read_text())
+    assert df["passed"].all() and summary["passed"] == 3
+    assert summary["answer_accuracy"] == 1.0 and summary["correct_refusals"] == 1.0 and summary["faithful_answers"] == 1.0

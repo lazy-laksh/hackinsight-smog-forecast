@@ -35,6 +35,29 @@ from smog import config
 
 IDK_EN = "I don't know based on my sources."
 IDK_UR = "میرے ذرائع کی بنیاد پر میں یہ نہیں جانتا۔"
+PROMPT_VERSION = "2026-10-20.4"   # bump whenever SYSTEM_PROMPT or the checks change; stored with every answer
+
+# Health questions always end with a pointer to official help, added by code (not by the model).
+HEALTH_WORDS = re.compile(
+    r"\b(cough|asthma|breath\w*|medicine|medical|medication|doctor|sick|illness|hospital|symptom\w*|pregnan\w*|"
+    r"chest|eyes?|throat|allerg\w*|inhaler|heart|lungs?)\b|کھانسی|دمہ|سانس|دوا|ڈاکٹر|بیمار|ہسپتال|علامات", re.I)
+HEALTH_NOTE_EN = ("This is information, not medical advice. In a medical emergency call Rescue 1122 or go to the "
+                  "nearest hospital, and follow official advisories from Punjab EPA, PDMA and PMD.")
+HEALTH_NOTE_UR = "یہ معلومات ہیں، طبی مشورہ نہیں۔ ہنگامی صورت میں ریسکیو 1122 پر کال کریں یا قریبی ہسپتال جائیں۔"
+
+# Personal details are removed from questions before they reach a model or the log.
+PII_PATTERNS = [
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "[email removed]"),
+    (re.compile(r"\b\d{5}-\d{7}-\d\b"), "[CNIC removed]"),                              # Pakistani national ID
+    (re.compile(r"(?:\+92[\s-]?|0)3\d{2}[\s-]?\d{7}\b"), "[phone removed]"),              # Pakistani mobile
+    (re.compile(r"\+?\d[\d\s-]{9,}\d"), "[number removed]"),                                # other long numbers
+]
+
+
+def redact(text: str) -> str:
+    for pattern, label in PII_PATTERNS:
+        text = pattern.sub(label, text)
+    return text
 TOP_K = 4
 UNHEALTHY = 55.5
 CITY_NAMES = {"lahore": "Lahore", "islamabad_rawalpindi": "Islamabad/Rawalpindi",
@@ -59,7 +82,9 @@ Answer ONLY from the SOURCES in the user message. Rules:
 5. Style: start with a one-sentence direct answer, then at most 3 short sentences with the key supporting
    numbers. Write in plain words for a district environment officer, no headings or bullet lists. When asked why a
    forecast is high or low, name the main reasons and their effects from the source. Do not give medical advice
-   beyond what the SOURCES say."""
+   beyond what the SOURCES say.
+6. If the question states a number that is not in the SOURCES (for example a wrong forecast), do not repeat that
+   number. Politely give the correct value from the SOURCES instead, with its citation."""
 
 
 # --- Sources ---------------------------------------------------------------------------------------
@@ -210,8 +235,12 @@ NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
 CITATION = re.compile(r"\[((?:doc|row|report):[^\]]+)\]")
 
 
+# Pollutant names contain digits ("PM2.5", "پی ایم 2.5", "PM10"); they are names, not claims, so they are skipped.
+POLLUTANT_NAME = re.compile(r"(?:PM|پی\s*ایم)\s*[-₂]?\s*(?:2\.5|10)\b", re.I)
+
+
 def _numbers(text: str) -> list[float]:
-    text = CITATION.sub(" ", text.translate(URDU_DIGITS))
+    text = POLLUTANT_NAME.sub(" ", CITATION.sub(" ", text.translate(URDU_DIGITS)))
     out = []
     for m in NUMBER.findall(text):
         try:
@@ -269,7 +298,8 @@ def check(answer: str, sources: list[Source], question: str = "") -> list[str]:
     if not cited:
         problems.append("no citation")
     problems += [f"unknown citation [{c}]" for c in cited if c not in ids]
-    allowed = _numbers(" ".join(s.text for s in sources) + " " + question)
+    # Only the sources count: a number the user puts in the question (maybe a wrong one) is not evidence.
+    allowed = _numbers(" ".join(s.text for s in sources))
     for n in _numbers(answer):
         if not any(abs(abs(n) - abs(a)) <= 0.051 for a in allowed):     # sign ignored: "−3" vs "-3"
             problems.append(f"number {n:g} is not in the sources")
@@ -390,6 +420,7 @@ class Answer:
     seconds: float = 0.0
     rejected: list[str] = field(default_factory=list)     # model answers that failed the check (for the log)
     model: str = ""                                        # which language model wrote the answer
+    prompt_version: str = PROMPT_VERSION
 
 
 class InsightAgent:
@@ -459,6 +490,7 @@ class InsightAgent:
     def ask(self, question: str, log: bool = True) -> Answer:
         self.refresh()
         start = time.time()
+        question = redact(question)
         urdu = self.is_urdu(question)
         idk = IDK_UR if urdu else IDK_EN
         query = question
@@ -486,11 +518,13 @@ class InsightAgent:
             answer = idk
         by_id = {s.id: s for s in sources}
         answer = bracket_known_ids(normalise(answer), set(by_id))
+        if HEALTH_WORDS.search(question):
+            answer = f"{answer}\n\n{HEALTH_NOTE_UR if urdu else HEALTH_NOTE_EN}"
         cited = sorted(set(cited_ids(answer)))
         result = Answer(question, answer, verified, [
             {"id": c, "title": by_id[c].title, "url": by_id[c].url, "text": by_id[c].text} for c in cited if c in by_id],
             problems, [d.id for d, _ in hits], "ur" if urdu else "en", attempts, round(time.time() - start, 1), rejected,
-            last_model_used or "")
+            last_model_used or "", PROMPT_VERSION)
         if log:
             path = config.ROOT / "data/logs/agent_log.jsonl"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -526,8 +560,10 @@ def evaluate(agent: InsightAgent, path: Path | None = None) -> pd.DataFrame:
             checks["answered"] = not is_idk(a.answer)
             for prefix in q.get("cite", []):
                 checks[f"cites {prefix}"] = any(c.startswith(prefix) for c in cited)
-            for text in q.get("must_include", []):
-                checks[f"says {text}"] = text in a.answer
+        for text in q.get("must_not_include", []):
+            checks[f"does not repeat {text}"] = text not in a.answer
+        for text in q.get("must_include", []):
+            checks[f"says {text}"] = text in a.answer
         if q.get("lang") == "ur":
             checks["answered in Urdu"] = InsightAgent.is_urdu(a.answer)
         rows.append({"id": q["id"], "question": q["question"], "expect": q["expect"],
@@ -536,6 +572,20 @@ def evaluate(agent: InsightAgent, path: Path | None = None) -> pd.DataFrame:
                      "model": a.model, "seconds": a.seconds})
         time.sleep(1)     # stay well inside the free API rate limit
     df = pd.DataFrame(rows)
+    answer_qs, idk_qs = df[df["expect"] == "answer"], df[df["expect"] == "idk"]
+    summary = {
+        "evaluated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "prompt_version": PROMPT_VERSION,
+        "questions": len(df), "passed": int(df["passed"].sum()),
+        # answered with the expected citation(s) and passed every check
+        "answer_accuracy": round(float(answer_qs["passed"].mean()), 3) if len(answer_qs) else None,
+        # said "I don't know" when it should
+        "correct_refusals": round(float(idk_qs["passed"].mean()), 3) if len(idk_qs) else None,
+        # share of answers whose every citation and number matched the sources (faithfulness, checked in code)
+        "faithful_answers": round(float((df["problems"] == "").mean()), 3),
+        "models_used": df["model"].value_counts().to_dict(),
+    }
+    (config.ROOT / "reports").mkdir(parents=True, exist_ok=True)
+    (config.ROOT / "reports/agent_eval_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     out = path or config.ROOT / "reports/agent_eval.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)

@@ -35,9 +35,13 @@ Open-Meteo + CAMS┘     (never edited)   (verified every run)          (gate 1 
 * **Decision layer** (`src/smog/decision.py`): chance of an unhealthy day (≥ 55.5 µg/m³) → advisory when the chance
   ≥ 1/(1+R); R = how many times worse a missed smog day is than a false alarm (default 3, slider on the dashboard).
 * **Insight Agent** (`src/smog/agent.py`): TF-IDF retrieval over cited official sources (`knowledge/`) plus data facts
-  built by code from gold rows; an LLM (Groq) answers with citations; code then checks every citation id and every
-  number against the sources and answers "I don't know" otherwise. English and Urdu. Golden set:
-  `config/agent_golden.yaml` (`python -m smog eval-agent`).
+  built by code from gold rows; an LLM (Groq gpt-oss, with Gemini Flash as fallback) answers with citations; code then
+  checks every citation id and every number against the sources (numbers typed by the user do not count) and answers
+  "I don't know" otherwise. English and Urdu. Guardrails in code: emails, phone numbers and CNICs are removed before
+  the model or the log sees a question; health questions always end with a "not medical advice, Rescue 1122" note;
+  every answer stores the model and prompt version. Golden set of 22 questions including an advisory brief and a
+  misleading question: `config/agent_golden.yaml` (`python -m smog eval-agent` → `reports/agent_eval.csv` and
+  `reports/agent_eval_summary.json` with answer accuracy, correct refusals and faithfulness).
 
 ## Hosting
 
@@ -76,7 +80,7 @@ cp .env.example .env        # Windows: copy .env.example .env
 | `python -m smog deploy-space` | create/update the static dashboard Space |
 | `python -m smog ask "..."` | ask the Insight Agent |
 | `python -m smog agent-ui` | local web page for the agent (http://127.0.0.1:8000) |
-| `python -m smog eval-agent` | run the 20-question golden set → `reports/agent_eval.csv` |
+| `python -m smog eval-agent` | run the 22-question golden set → `reports/agent_eval.csv` + `agent_eval_summary.json` |
 | `python -m smog export-runs` | Prefect run history for the evaluation window → `prefect_runs.csv` |
 | `make test` / `python -m pytest -q` | unit tests (no network, no keys needed) |
 

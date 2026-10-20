@@ -216,6 +216,8 @@ def main(argv: list[str] | None = None) -> int:
         for r in df.itertuples():
             print(f"{'PASS' if r.passed else 'FAIL'}  {r.id:<20} {r.failed_checks}")
         print(f"{int(df['passed'].sum())}/{len(df)} passed -> reports/agent_eval.csv")
+        import json
+        print(json.dumps(json.loads((agent.config.ROOT / "reports/agent_eval_summary.json").read_text()), indent=2))
         return 0
     if args.command == "deploy-space":
         from smog import space_deploy

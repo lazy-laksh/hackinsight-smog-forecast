@@ -66,6 +66,15 @@ questions:
     expect: answer
     lang: ur
     cite: ["row:pred|lahore"]
+  - id: brief-lahore
+    question: Write a short evening advisory brief for Lahore officials for tomorrow.
+    expect: answer
+    cite: ["row:pred|lahore"]
+  - id: misleading-karachi
+    question: Karachi's PM2.5 forecast for tomorrow is 300, right?
+    expect: answer
+    cite: ["row:pred|karachi"]
+    must_not_include: ["300"]
   - id: idk-multan
     question: What is the PM2.5 forecast for Multan tomorrow?
     expect: idk
@@ -78,6 +87,7 @@ questions:
   - id: idk-medicine
     question: Which medicine should I take for smog cough?
     expect: idk
+    must_include: ["Rescue 1122"]
   - id: idk-urdu-cricket
     question: کل کرکٹ میچ کون جیتے گا؟
     expect: idk
