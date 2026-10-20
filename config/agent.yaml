@@ -12,7 +12,8 @@ providers:
   - name: gemini
     base_url: https://generativelanguage.googleapis.com/v1beta/openai
     key_env: GEMINI_API_KEY
-    models: [gemini-3.8-flash, gemini-3.5-flash, gemini-2.5-flash]
+    models: [gemini-3.8-flash, gemini-3.5-flash, gemini-2.5-flash]   # checked with agent-models on 20 Oct
+    extra: {reasoning_effort: low}     # shorter hidden thinking = faster answers; dropped automatically if refused
   - name: groq
     base_url: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY

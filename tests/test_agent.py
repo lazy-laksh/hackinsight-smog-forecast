@@ -184,3 +184,27 @@ def test_status_and_skill_facts_are_sent_only_when_asked(folder):
     plain = [f.id for f in a.select_facts("What is tomorrow's forecast for Lahore?")]
     assert not any(i.startswith(("row:freshness|", "report:")) for i in plain)
     assert any(i.startswith("row:freshness|") for i in [f.id for f in a.select_facts("Is the data fresh?")])
+
+
+def test_extra_setting_is_dropped_if_the_model_refuses_it(monkeypatch):
+    bodies = []
+
+    class R:
+        def __init__(self, code, body=None):
+            self.status_code, self.headers, self._body, self.text = code, {}, body, "bad param"
+
+        def json(self):
+            return self._body
+
+    def post(url, timeout, json, headers):
+        bodies.append(dict(json))
+        return R(400) if "reasoning_effort" in json else R(200, {"choices": [{"message": {"content": "ok"}}]})
+
+    import requests
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(agent, "_busy_until", {})
+    monkeypatch.setattr(agent, "providers", lambda: [
+        {"name": "g", "base_url": "http://x", "key_env": "K", "models": ["m"], "extra": {"reasoning_effort": "low"}}])
+    monkeypatch.setenv("K", "t")
+    assert agent.llm_chat([{"role": "user", "content": "hi"}]) == "ok"
+    assert "reasoning_effort" in bodies[0] and "reasoning_effort" not in bodies[1]

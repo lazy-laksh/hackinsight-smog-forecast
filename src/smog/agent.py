@@ -334,8 +334,9 @@ def llm_chat(messages: list[dict], max_tokens: int = 1500) -> str:
             tag = f"{p['name']}:{model}"
             if tag in _missing or _busy_until.get(tag, 0) > time.time():
                 continue
+            extra = dict(p.get("extra") or {})          # e.g. {"reasoning_effort": "low"} to make thinking models faster
             for attempt in range(4):
-                body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
+                body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens, **extra}
                 try:
                     r = requests.post(p["base_url"].rstrip("/") + "/chat/completions", timeout=90, json=body,
                                       headers={"Authorization": f"Bearer {key}"})
@@ -357,6 +358,9 @@ def llm_chat(messages: list[dict], max_tokens: int = 1500) -> str:
                     continue
                 if r.status_code in (500, 502, 503) and attempt < 3:
                     time.sleep(2 ** attempt)
+                    continue
+                if r.status_code == 400 and extra:          # this model does not accept the extra setting: drop it
+                    extra = {}
                     continue
                 if r.status_code >= 400:
                     problems.append(f"{tag}: HTTP {r.status_code} {r.text[:150]}")
