@@ -34,3 +34,8 @@ def test_space_metadata_is_valid_for_hugging_face():
 def test_missing_probability_is_never_shown_as_no_advisory():
     html = (config.ROOT / "space_static/index.html").read_text(encoding="utf-8")
     assert "Chance not computed for this run" in html and "امکان دستیاب نہیں" in html
+
+
+def test_markers_follow_the_theme_colour():
+    html = (config.ROOT / "space_static/index.html").read_text(encoding="utf-8")
+    assert 'color: "#111827"}' not in html            # black markers vanish on the dark theme

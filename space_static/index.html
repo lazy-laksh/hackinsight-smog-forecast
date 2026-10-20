@@ -172,6 +172,7 @@ const ago = d => { const h = hoursSince(d); return !isFinite(h) ? "never" : h < 
 const thrFor = r => 1 / (1 + r);
 const R = () => Number($("r").value);
 const LANG = () => document.querySelector("input[name=lang]:checked").value;
+const INK = () => getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#0f172a";
 const theme = () => matchMedia("(prefers-color-scheme: dark)").matches
   ? {paper_bgcolor: "#111827", plot_bgcolor: "#111827", font: {color: "#e5e7eb"}} : {};
 
@@ -317,13 +318,14 @@ function renderReport() {
   const traces = [{x: daily.map(r => r.day_pkt), y: daily.map(r => r.pm25_mean), name: "measured daily mean",
     mode: "lines+markers", line: {color: info.color}}];
   if (sc.length) traces.push({x: sc.map(r => r.target_day_pkt), y: sc.map(r => r.pm25_pred), mode: "markers",
-    name: "our forecast (evening before)", marker: {symbol: "diamond", size: 11, color: "#111827"},
+    name: "our forecast (evening before)", marker: {symbol: "diamond", size: 11, color: INK()},
     error_y: {type: "data", symmetric: false, array: sc.map(r => r.pm25_p90 - r.pm25_pred), arrayminus: sc.map(r => r.pm25_pred - r.pm25_p10)}});
   Plotly.react("p-history", traces, {title: `${info.en}: last 60 days (measured) and our live forecasts`, height: 380,
     yaxis: {title: "PM2.5 µg/m³"}, shapes: [hline()], margin: {l: 50, r: 20, t: 50, b: 40},
     legend: {orientation: "h", y: -0.2}, ...theme()}, {responsive: true, displaylogo: false});
 
   const all = D["scorecard.csv"].map(r => ({...r, city: (CITIES[r.city_id] || {}).en || r.city_id,
+    issued_pkt: String(r.issued_pkt || "").slice(0, 16),
     "P(unhealthy)": pct(num(r.p_unhealthy))}));
   $("score").innerHTML = all.length ? table(all, [["target_day_pkt", "day"], "city", ["pm25_pred", "forecast"],
     ["pm25_p10", "low"], ["pm25_p90", "high"], "P(unhealthy)", ["pm25_mean", "measured"], "status", ["error", "our error"],
@@ -344,7 +346,7 @@ function renderReport() {
     {x: x.concat([...x].reverse()), y: bt.map(r => r.p90).concat(bt.map(r => r.p10).reverse()), fill: "toself",
      fillcolor: info.color, opacity: 0.15, line: {width: 0}, name: "80% range"},
     {x, y: bt.map(r => r.prediction), name: "forecast", line: {color: info.color}},
-    {x, y: bt.map(r => r.target), name: "what happened", mode: "markers", marker: {color: "#111827"}},
+    {x, y: bt.map(r => r.target), name: "what happened", mode: "markers", marker: {color: INK(), size: 7}},
     {x, y: bt.map(r => r.baseline_same_info), name: "baseline: same as today", line: {color: "#94a3b8", dash: "dash"}},
   ], {title: `${info.en}: back-test on the locked test month (never used for tuning)`, height: 380,
     yaxis: {title: "PM2.5 µg/m³"}, shapes: [hline()], margin: {l: 50, r: 20, t: 50, b: 40},
