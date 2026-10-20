@@ -121,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("verify", help="check every raw file against its SHA-256 in manifest.csv")
     sub.add_parser("train", help="train the forecast model, score it on the test set, write reports/")
     sub.add_parser("predict", help="forecast tomorrow for each city and add it to gold.predictions")
+    sub.add_parser("publish", help="export dashboard files to data/publish and upload them to Hugging Face")
+    space = sub.add_parser("deploy-space", help="create or update the Hugging Face Space (the dashboard)")
+    space.add_argument("--name", default="smog-forecast-pakistan", help="Space name under your HF account")
     export = sub.add_parser("export-runs", help="write Prefect run history to prefect_runs.csv")
     export.add_argument("--start", default="2026-10-20T16:00:00+05:00", help="ISO time, e.g. 2026-10-20T16:00:00+05:00")
     export.add_argument("--end", default="2026-10-21T16:00:00+05:00")
@@ -168,6 +171,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"SKIPPED: {missing.name} is not installed here (run `pip install -r requirements.txt`)")
             return 0
         print(model.predict())
+        return 0
+    if args.command == "publish":
+        try:
+            from smog import publish
+        except ImportError as missing:
+            print(f"SKIPPED: {missing.name} is not installed here (run `pip install -r requirements.txt`)")
+            return 0
+        print(publish.run())
+        return 0
+    if args.command == "deploy-space":
+        from smog import space_deploy
+        print(space_deploy.run(args.name))
         return 0
     if args.command == "verify":
         try:

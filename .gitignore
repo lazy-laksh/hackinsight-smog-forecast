@@ -5,6 +5,8 @@
 data/raw/
 data/cleaned/
 data/gold/
+# Model files are rebuilt by `python -m smog train`; the metrics and model card in reports/ ARE committed.
+data/models/
 data/*.duckdb
 data/*.duckdb.wal
 # The manifest IS committed: it is the proof of where every raw file came from.
@@ -24,3 +26,6 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Files exported for the dashboard (uploaded to Hugging Face, not committed)
+data/publish/

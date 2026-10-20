@@ -32,7 +32,7 @@ def fake_smog(tmp_path, monkeypatch):
 
     monkeypatch.setattr(hourly_flow, "smog", fake)
     # No 2-minute waits between retries inside tests.
-    for name in ("fetch_openaq", "fetch_firms", "fetch_openmeteo"):
+    for name in ("fetch_openaq", "fetch_firms", "fetch_openmeteo", "publish"):
         monkeypatch.setattr(hourly_flow, name, getattr(hourly_flow, name).with_options(retry_delay_seconds=0))
     return calls, failing
 
@@ -45,7 +45,7 @@ def test_all_steps_run_in_order(fake_smog, tmp_path):
     calls, _ = fake_smog
     steps = hourly_flow.hourly()
     assert calls == ["fetch-openaq", "fetch-firms", "fetch-openmeteo", "verify",
-                     "build-cleaned", "quality", "build-gold", "predict"]
+                     "build-cleaned", "quality", "build-gold", "predict", "publish"]
     assert steps["gold"] == "build-gold ok"
     s = status(tmp_path)
     assert s["last_run"]["status"] == "success" and s["last_success"] == s["last_run"]
@@ -59,6 +59,7 @@ def test_failed_download_is_retried_then_run_continues(fake_smog, tmp_path):
     assert steps["firms"].startswith("FAILED")
     assert "build-gold" in calls                             # the rest still ran
     assert status(tmp_path)["last_run"]["status"] == "success"
+    assert hourly_flow.hourly(return_state=True).is_completed()   # Prefect also shows the run as Completed
 
 
 def test_export_runs_includes_failed_runs(fake_smog, tmp_path):
@@ -91,6 +92,17 @@ def test_failed_quality_gate_stops_run_and_keeps_last_success(fake_smog, tmp_pat
     with pytest.raises(Exception):
         hourly_flow.hourly()
     assert "build-gold" not in calls                         # gold is not rebuilt
+    assert "publish" in calls                                # dashboard still learns that the run failed
     s = status(tmp_path)
     assert s["last_run"]["status"] == "failed" and "quality" in s["last_run"]["steps"]["error"]
     assert s["last_success"] == good                         # dashboard still knows the last good run
+
+
+def test_failed_publish_does_not_fail_the_run(fake_smog, tmp_path):
+    calls, failing = fake_smog
+    failing.add("publish")
+    steps = hourly_flow.hourly()
+    assert calls.count("publish") == 2                       # first try + 1 retry
+    assert steps["publish"].startswith("FAILED") and steps["forecast"] == "predict ok"
+    assert status(tmp_path)["last_run"]["status"] == "success"
+    assert hourly_flow.hourly(return_state=True).is_completed()   # Prefect also shows the run as Completed

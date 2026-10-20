@@ -93,6 +93,17 @@ def forecast() -> str:
     return smog("predict")
 
 
+@task(name="publish dashboard data", retries=1, retry_delay_seconds=60)
+def publish() -> str:
+    return smog("publish")
+
+
+def try_publish(steps: dict) -> None:
+    """Send results to the dashboard. A failure here never fails the run (the forecast is already made)."""
+    state = publish(return_state=True)
+    steps["publish"] = state.result() if state.is_completed() else f"FAILED: {state.message}"
+
+
 def write_status(status: str, started: datetime, steps: dict) -> None:
     """Small JSON file the dashboard reads to show the last run and the last successful run."""
     path = config.ROOT / STATUS_FILE
@@ -128,9 +139,11 @@ def hourly() -> dict:
     except Exception as error:
         steps["error"] = str(error)
         write_status("failed", started, steps)
+        try_publish(steps)          # the dashboard shows the failure and keeps the last good data
         raise
 
     write_status("success", started, steps)
+    try_publish(steps)
     create_markdown_artifact(
         key="hourly-run-summary",
         markdown="| step | result |\n|---|---|\n" + "\n".join(f"| {k} | {v} |" for k, v in steps.items()),

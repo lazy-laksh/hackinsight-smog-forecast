@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-from smog import config, warehouse
+from smog import config, decision, warehouse
 
 ISSUE_HOUR_PKT = 20               # forecasts are issued at 20:00 Pakistan time
 EVENING_START_PKT = 14
@@ -302,6 +302,14 @@ def train() -> str:
                            "baseline_mae": b["mae"], "improvement_pct": improvement(m, b)})
     oof_groups = pd.DataFrame(oof_groups)
 
+    # Decision rule ("issue an advisory?"), replayed on validation months and on the test month.
+    val = oof_ranges.copy()
+    val["p10"] = np.minimum(val["p10"] - widen, val["prediction"]).clip(lower=0)
+    val["p90"] = np.maximum(val["p90"] + widen, val["prediction"])
+    decisions = decision.report(val, t)
+    for frame in (val, t):
+        frame["p_unhealthy"] = decision.prob_exceed(frame["prediction"], frame["p10"], frame["p90"]).round(3)
+
     lahore = by_city.set_index("city").loc["lahore"] if "lahore" in set(by_city["city"]) else None
     metrics = {
         "trained_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -334,15 +342,22 @@ def train() -> str:
     }
 
     models_dir().mkdir(parents=True, exist_ok=True)
-    joblib.dump({"point": point, "p10": low, "p90": high, "widen": widen, "features": cols, "metrics": metrics},
-                models_dir() / "model.joblib")
+    # A "typical day" per city (medians of the training features), used to explain each live forecast.
+    typical = train_set.groupby("city_id")[cols].median()
+    joblib.dump({"point": point, "p10": low, "p90": high, "widen": widen, "features": cols, "metrics": metrics,
+                 "typical": typical}, models_dir() / "model.joblib")
     reports_dir().mkdir(parents=True, exist_ok=True)
     (reports_dir() / "model_metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     by_city.to_csv(reports_dir() / "test_errors_by_city.csv", index=False)
     oof_groups.to_csv(reports_dir() / "validation_errors_by_city_and_season.csv", index=False)
-    t[["city_id", "target_day", "target", "prediction", "p10", "p90", "baseline_same_info", "target_row_id"]] \
-        .to_csv(reports_dir() / "test_predictions.csv", index=False)
-    write_model_card(metrics, by_city, oof_groups)
+    keep = ["city_id", "target_day", "target", "prediction", "p10", "p90", "p_unhealthy",
+            "baseline_same_info", "target_row_id"]
+    t[keep].to_csv(reports_dir() / "test_predictions.csv", index=False)
+    # Out-of-sample predictions for every validation month (each made by a model trained only on
+    # earlier months). Used for the decision replay and the "replay a smog episode" view.
+    val[keep].round({c: 2 for c in ("target", "prediction", "p10", "p90", "baseline_same_info")}).to_csv(reports_dir() / "validation_predictions.csv", index=False)
+    (reports_dir() / "decision_metrics.json").write_text(json.dumps(decisions, indent=2), encoding="utf-8")
+    write_model_card(metrics, by_city, oof_groups, decisions)
 
     return (f"model MAE {model_s['mae']} vs baseline {base_s['mae']} µg/m³ on {model_s['n']} test city-days "
             f"({metrics['test']['improvement_vs_baseline_pct']}% better); 80% range held the true value "
@@ -360,8 +375,34 @@ def _table(df: pd.DataFrame) -> str:
     return "\n".join(rows)
 
 
-def write_model_card(m: dict, by_city: pd.DataFrame, by_group: pd.DataFrame) -> None:
+def _decision_section(dec: dict) -> str:
+    r = str(dec["default_cost_ratio"])
+    rows = []
+    for period in ("validation", "test"):
+        e = dec[period][r]
+        for rule, label in (("our_rule", f"Our rule: warn if P(unhealthy) ≥ {e['threshold']:.0%}"),
+                            ("warn_if_today_unhealthy", "Warn if today is unhealthy (persistence)"),
+                            ("warn_if_forecast_number_unhealthy", "Warn if the forecast number ≥ 55.5")):
+            s = e[rule]
+            rows.append({"period": period, "rule": label, "days": s["days"], "unhealthy days": s["unhealthy_days"],
+                         "hits": s["hits"], "misses": s["misses"], "false alarms": s["false_alarms"],
+                         "cost per 100 days": s["cost_per_100_days"]})
+    v = dec["validation"][r]
+    return (
+        '## From forecast to decision: "issue a smog advisory?"\n'
+        f"We turn the calibrated range into a **chance that tomorrow is unhealthy** (mean ≥ {dec['unhealthy_level_ugm3']} µg/m³) and\n"
+        "issue an advisory when that chance is at least 1/(1+R), where **R = how many times worse a missed unhealthy day\n"
+        "is than an unnecessary advisory**. R is a policy choice made by the user, not fitted to data; our default is\n"
+        f"R = {dec['default_cost_ratio']:g} (threshold {v['threshold']:.0%}). Cost is counted as 1 per false alarm and R per miss.\n\n"
+        f"{_table(pd.DataFrame(rows))}\n\n"
+        f"Probability quality on the validation months: Brier score {v['probability_brier']} (skill vs always saying\n"
+        f"the base rate: {v['probability_brier_skill_vs_base_rate']}; above 0 means the probabilities carry real information).\n"
+    )
+
+
+def write_model_card(m: dict, by_city: pd.DataFrame, by_group: pd.DataFrame, dec: dict | None = None) -> None:
     t = m["test"]
+    decision_text = _decision_section(dec) if dec else ""
     worst = by_city.sort_values("model_mae", ascending=False).iloc[0]
     text = f"""# Model card: next-day PM2.5 forecast
 
@@ -411,6 +452,7 @@ How the range was calibrated: the raw 10%/90% models were too confident (on the 
 ({m['interval_calibration']['validation_days']} city-days: coverage {m['interval_calibration']['validation_coverage_before']:.0%} → {m['interval_calibration']['validation_coverage_after']:.0%}),
 using conformalized quantile regression. The test set was not used to choose it.
 
+{decision_text}
 ## Errors by city (test set)
 {_table(by_city)}
 
@@ -451,6 +493,53 @@ def _forecast_daily(con, now: pd.Timestamp) -> dict[str, pd.DataFrame]:
             FROM {table} f JOIN latest l ON f.city_id = l.city_id AND f.issued_utc = l.issued
             GROUP BY 1, 2""", [now.to_pydatetime()]).df()
     return out
+
+
+# Feature groups in plain words, for "why is tomorrow's forecast high or low?"
+DRIVER_GROUPS = {
+    "smog already in the air (today and recent days)": lambda c: c.startswith("pm_"),
+    "tomorrow's weather (wind, rain, mixing height)": lambda c: c.endswith("_tomorrow") and not c.startswith(("cams_", "weekday")),
+    "today's weather": lambda c: c.endswith("_today") and not c.startswith(("pm_", "fires_", "frp_", "cams_")),
+    "fires nearby (crop burning)": lambda c: c.startswith(("fires_", "frp_")),
+    "CAMS air-quality model": lambda c: c.startswith("cams_"),
+    "season": lambda c: c.startswith("season_"),
+}
+
+
+def explain(point, rows: pd.DataFrame, cols: list[str], typical: pd.DataFrame) -> list[list[dict]]:
+    """For each row: how much each group of inputs moves the forecast away from a typical day.
+
+    Method ("what if this group were typical?"): set one group of inputs to that city's typical
+    (median training) values, predict again, and report the difference. Positive = pushes the
+    forecast up. Simple, model-agnostic, and honest about being an approximation (effects can overlap).
+    """
+    full = point.predict(rows[cols])
+    out = []
+    for i, (_, row) in enumerate(rows.iterrows()):
+        base = typical.loc[row["city_id"]] if row["city_id"] in typical.index else typical.median()
+        items = []
+        for label, match in DRIVER_GROUPS.items():
+            group = [c for c in cols if match(c)]
+            if not group:
+                continue
+            what_if = rows.iloc[[i]][cols].copy()
+            what_if.loc[:, group] = base[group].to_numpy()
+            items.append({"driver": label, "effect_ugm3": round(float(full[i] - point.predict(what_if)[0]), 1)})
+        out.append(sorted(items, key=lambda d: -abs(d["effect_ugm3"])))
+    return out
+
+
+def _append(con, table: str, df: pd.DataFrame) -> None:
+    """Append rows; add any new columns first, so older history rows are kept (new columns are empty there)."""
+    con.register("new_rows", df)
+    con.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM new_rows WHERE false")
+    have = set(con.execute(f"SELECT * FROM {table} LIMIT 0").df().columns)
+    types = {r[0]: r[1] for r in con.execute("DESCRIBE new_rows").fetchall()}
+    for col in df.columns:
+        if col not in have:
+            con.execute(f'ALTER TABLE {table} ADD COLUMN "{col}" {types[col]}')
+    con.execute(f"INSERT INTO {table} BY NAME SELECT * FROM new_rows")
+    con.unregister("new_rows")
 
 
 def predict(now: datetime | None = None) -> str:
@@ -500,10 +589,13 @@ def predict(now: datetime | None = None) -> str:
             ["unhealthy very likely", "unhealthy likely", "unhealthy possible"], "unhealthy unlikely")
         out["row_id"] = ("pred|" + out["city_id"] + "|" + pd.to_datetime(out["target_day_pkt"]).dt.strftime("%Y%m%d")
                          + "|" + now.strftime("%Y%m%dT%H%M"))
+        # Decision layer: chance of an unhealthy day and the default advisory (see decision.py).
+        out["p_unhealthy"] = decision.prob_exceed(out["pm25_pred"], out["pm25_p10"], out["pm25_p90"]).round(3)
+        out["advisory_default"] = decision.advise(out["p_unhealthy"])
+        if "typical" in bundle:
+            out["drivers_json"] = [json.dumps(d) for d in explain(bundle["point"], rows, cols, bundle["typical"])]
         con.execute("CREATE SCHEMA IF NOT EXISTS gold")
-        con.register("pred_df", out)
-        con.execute("CREATE TABLE IF NOT EXISTS gold.predictions AS SELECT * FROM pred_df WHERE false")
-        con.execute("INSERT INTO gold.predictions BY NAME SELECT * FROM pred_df")
-        con.unregister("pred_df")
-    return "; ".join(f"{r.city_id}: {r.pm25_pred} ({r.pm25_p10}-{r.pm25_p90}) {r.category}"
+        _append(con, "gold.predictions", out.reset_index(drop=True))
+    return "; ".join(f"{r.city_id}: {r.pm25_pred} ({r.pm25_p10}-{r.pm25_p90}) {r.category}, "
+                     f"P(unhealthy) {r.p_unhealthy:.0%}{', ADVISORY' if r.advisory_default else ''}"
                      for r in out.itertuples()) + f" for {out['target_day_pkt'].iloc[0]}"

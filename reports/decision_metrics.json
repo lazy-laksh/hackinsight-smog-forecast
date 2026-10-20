@@ -1,0 +1,467 @@
+{
+  "unhealthy_level_ugm3": 55.5,
+  "default_cost_ratio": 3.0,
+  "rule": "issue an advisory when P(unhealthy) >= 1/(1+R), R = cost of a miss / cost of a false alarm",
+  "validation": {
+    "1.0": {
+      "cost_ratio": 1.0,
+      "threshold": 0.5,
+      "our_rule": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 9.5
+      },
+      "warn_if_today_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 627,
+        "hits": 558,
+        "misses": 74,
+        "false_alarms": 69,
+        "correct_quiet": 757,
+        "hit_rate": 0.883,
+        "false_alarm_ratio": 0.11,
+        "cost_per_100_days": 9.8
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 9.5
+      },
+      "probability_brier": 0.0688,
+      "probability_brier_skill_vs_base_rate": 0.72
+    },
+    "2.0": {
+      "cost_ratio": 2.0,
+      "threshold": 0.333,
+      "our_rule": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 742,
+        "hits": 607,
+        "misses": 25,
+        "false_alarms": 135,
+        "correct_quiet": 691,
+        "hit_rate": 0.96,
+        "false_alarm_ratio": 0.182,
+        "cost_per_100_days": 12.7
+      },
+      "warn_if_today_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 627,
+        "hits": 558,
+        "misses": 74,
+        "false_alarms": 69,
+        "correct_quiet": 757,
+        "hit_rate": 0.883,
+        "false_alarm_ratio": 0.11,
+        "cost_per_100_days": 14.9
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 14.5
+      },
+      "probability_brier": 0.0688,
+      "probability_brier_skill_vs_base_rate": 0.72
+    },
+    "3.0": {
+      "cost_ratio": 3.0,
+      "threshold": 0.25,
+      "our_rule": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 797,
+        "hits": 614,
+        "misses": 18,
+        "false_alarms": 183,
+        "correct_quiet": 643,
+        "hit_rate": 0.972,
+        "false_alarm_ratio": 0.23,
+        "cost_per_100_days": 16.3
+      },
+      "warn_if_today_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 627,
+        "hits": 558,
+        "misses": 74,
+        "false_alarms": 69,
+        "correct_quiet": 757,
+        "hit_rate": 0.883,
+        "false_alarm_ratio": 0.11,
+        "cost_per_100_days": 20.0
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 19.5
+      },
+      "probability_brier": 0.0688,
+      "probability_brier_skill_vs_base_rate": 0.72
+    },
+    "5.0": {
+      "cost_ratio": 5.0,
+      "threshold": 0.167,
+      "our_rule": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 859,
+        "hits": 621,
+        "misses": 11,
+        "false_alarms": 238,
+        "correct_quiet": 588,
+        "hit_rate": 0.983,
+        "false_alarm_ratio": 0.277,
+        "cost_per_100_days": 20.1
+      },
+      "warn_if_today_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 627,
+        "hits": 558,
+        "misses": 74,
+        "false_alarms": 69,
+        "correct_quiet": 757,
+        "hit_rate": 0.883,
+        "false_alarm_ratio": 0.11,
+        "cost_per_100_days": 30.1
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 29.5
+      },
+      "probability_brier": 0.0688,
+      "probability_brier_skill_vs_base_rate": 0.72
+    },
+    "10.0": {
+      "cost_ratio": 10.0,
+      "threshold": 0.091,
+      "our_rule": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 903,
+        "hits": 623,
+        "misses": 9,
+        "false_alarms": 280,
+        "correct_quiet": 546,
+        "hit_rate": 0.986,
+        "false_alarm_ratio": 0.31,
+        "cost_per_100_days": 25.4
+      },
+      "warn_if_today_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 627,
+        "hits": 558,
+        "misses": 74,
+        "false_alarms": 69,
+        "correct_quiet": 757,
+        "hit_rate": 0.883,
+        "false_alarm_ratio": 0.11,
+        "cost_per_100_days": 55.5
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 1458,
+        "unhealthy_days": 632,
+        "advisories": 624,
+        "hits": 559,
+        "misses": 73,
+        "false_alarms": 65,
+        "correct_quiet": 761,
+        "hit_rate": 0.884,
+        "false_alarm_ratio": 0.104,
+        "cost_per_100_days": 54.5
+      },
+      "probability_brier": 0.0688,
+      "probability_brier_skill_vs_base_rate": 0.72
+    }
+  },
+  "test": {
+    "1.0": {
+      "cost_ratio": 1.0,
+      "threshold": 0.5,
+      "our_rule": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 9.2
+      },
+      "warn_if_today_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 34,
+        "hits": 27,
+        "misses": 11,
+        "false_alarms": 7,
+        "correct_quiet": 31,
+        "hit_rate": 0.711,
+        "false_alarm_ratio": 0.206,
+        "cost_per_100_days": 23.7
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 9.2
+      },
+      "probability_brier": 0.0884,
+      "probability_brier_skill_vs_base_rate": 0.646
+    },
+    "2.0": {
+      "cost_ratio": 2.0,
+      "threshold": 0.333,
+      "our_rule": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 47,
+        "hits": 37,
+        "misses": 1,
+        "false_alarms": 10,
+        "correct_quiet": 28,
+        "hit_rate": 0.974,
+        "false_alarm_ratio": 0.213,
+        "cost_per_100_days": 15.8
+      },
+      "warn_if_today_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 34,
+        "hits": 27,
+        "misses": 11,
+        "false_alarms": 7,
+        "correct_quiet": 31,
+        "hit_rate": 0.711,
+        "false_alarm_ratio": 0.206,
+        "cost_per_100_days": 38.2
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 13.2
+      },
+      "probability_brier": 0.0884,
+      "probability_brier_skill_vs_base_rate": 0.646
+    },
+    "3.0": {
+      "cost_ratio": 3.0,
+      "threshold": 0.25,
+      "our_rule": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 52,
+        "hits": 37,
+        "misses": 1,
+        "false_alarms": 15,
+        "correct_quiet": 23,
+        "hit_rate": 0.974,
+        "false_alarm_ratio": 0.288,
+        "cost_per_100_days": 23.7
+      },
+      "warn_if_today_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 34,
+        "hits": 27,
+        "misses": 11,
+        "false_alarms": 7,
+        "correct_quiet": 31,
+        "hit_rate": 0.711,
+        "false_alarm_ratio": 0.206,
+        "cost_per_100_days": 52.6
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 17.1
+      },
+      "probability_brier": 0.0884,
+      "probability_brier_skill_vs_base_rate": 0.646
+    },
+    "5.0": {
+      "cost_ratio": 5.0,
+      "threshold": 0.167,
+      "our_rule": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 58,
+        "hits": 37,
+        "misses": 1,
+        "false_alarms": 21,
+        "correct_quiet": 17,
+        "hit_rate": 0.974,
+        "false_alarm_ratio": 0.362,
+        "cost_per_100_days": 34.2
+      },
+      "warn_if_today_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 34,
+        "hits": 27,
+        "misses": 11,
+        "false_alarms": 7,
+        "correct_quiet": 31,
+        "hit_rate": 0.711,
+        "false_alarm_ratio": 0.206,
+        "cost_per_100_days": 81.6
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 25.0
+      },
+      "probability_brier": 0.0884,
+      "probability_brier_skill_vs_base_rate": 0.646
+    },
+    "10.0": {
+      "cost_ratio": 10.0,
+      "threshold": 0.091,
+      "our_rule": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 59,
+        "hits": 37,
+        "misses": 1,
+        "false_alarms": 22,
+        "correct_quiet": 16,
+        "hit_rate": 0.974,
+        "false_alarm_ratio": 0.373,
+        "cost_per_100_days": 42.1
+      },
+      "warn_if_today_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 34,
+        "hits": 27,
+        "misses": 11,
+        "false_alarms": 7,
+        "correct_quiet": 31,
+        "hit_rate": 0.711,
+        "false_alarm_ratio": 0.206,
+        "cost_per_100_days": 153.9
+      },
+      "warn_if_forecast_number_unhealthy": {
+        "days": 76,
+        "unhealthy_days": 38,
+        "advisories": 39,
+        "hits": 35,
+        "misses": 3,
+        "false_alarms": 4,
+        "correct_quiet": 34,
+        "hit_rate": 0.921,
+        "false_alarm_ratio": 0.103,
+        "cost_per_100_days": 44.7
+      },
+      "probability_brier": 0.0884,
+      "probability_brier_skill_vs_base_rate": 0.646
+    }
+  },
+  "reliability_validation": [
+    {
+      "bin": "[0.0, 0.1)",
+      "days": 559,
+      "said": 0.013,
+      "happened": 0.016
+    },
+    {
+      "bin": "[0.1, 0.3)",
+      "days": 138,
+      "said": 0.204,
+      "happened": 0.072
+    },
+    {
+      "bin": "[0.3, 0.5)",
+      "days": 137,
+      "said": 0.412,
+      "happened": 0.394
+    },
+    {
+      "bin": "[0.5, 0.7)",
+      "days": 121,
+      "said": 0.608,
+      "happened": 0.636
+    },
+    {
+      "bin": "[0.7, 0.9)",
+      "days": 65,
+      "said": 0.78,
+      "happened": 0.862
+    },
+    {
+      "bin": "[0.9, 1.0)",
+      "days": 438,
+      "said": 0.988,
+      "happened": 0.973
+    }
+  ]
+}

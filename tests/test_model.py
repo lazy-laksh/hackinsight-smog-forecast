@@ -174,3 +174,74 @@ def test_live_prediction_for_tomorrow(trained):
     assert ((p["pm25_p10"] <= p["pm25_pred"]) & (p["pm25_pred"] <= p["pm25_p90"])).all()
     assert p["row_id"].str.startswith("pred|").all() and p["inputs_row_ids"].str.contains("weatherday").all()
     assert set(p["category"]) <= {"unhealthy very likely", "unhealthy likely", "unhealthy possible", "unhealthy unlikely"}
+
+
+def test_decision_files_and_card(trained):
+    tmp, _ = trained
+    import json
+    d = json.loads((tmp / "reports/decision_metrics.json").read_text())
+    rule = d["test"][str(d["default_cost_ratio"])]
+    for name in ("our_rule", "warn_if_today_unhealthy", "warn_if_forecast_number_unhealthy"):
+        s = rule[name]
+        assert s["hits"] + s["misses"] + s["false_alarms"] + s["correct_quiet"] == s["days"]
+    assert "issue a smog advisory" in (tmp / "reports/MODEL_CARD.md").read_text()
+    val = pd.read_csv(tmp / "reports/validation_predictions.csv")
+    assert val["p_unhealthy"].between(0.01, 0.99).all() and val["target_day"].max() < "2026-10-01"
+
+
+def test_live_prediction_has_probability_advice_and_drivers(trained):
+    import json
+    model.predict(now=NOW)
+    with warehouse.connect(read_only=True) as con:
+        p = con.execute("SELECT * FROM gold.predictions").df()
+    assert p["p_unhealthy"].between(0.01, 0.99).all()
+    assert p["advisory_default"].dtype == bool
+    drivers = json.loads(p["drivers_json"].iloc[0])
+    assert drivers and {"driver", "effect_ugm3"} <= set(drivers[0])
+
+
+def test_old_predictions_table_gets_new_columns(trained):
+    # A table written by the previous version (no probability columns) must keep its rows.
+    with warehouse.connect() as con:
+        con.execute("DROP TABLE IF EXISTS gold.predictions")
+        con.execute("CREATE TABLE gold.predictions (city_id VARCHAR, row_id VARCHAR, pm25_pred DOUBLE)")
+        con.execute("INSERT INTO gold.predictions VALUES ('lahore', 'pred|old', 80.0)")
+    model.predict(now=NOW)
+    with warehouse.connect(read_only=True) as con:
+        p = con.execute("SELECT * FROM gold.predictions").df()
+    assert "pred|old" in set(p["row_id"]) and "p_unhealthy" in p.columns and len(p) == 5
+
+
+def test_publish_export_has_dashboard_files_and_no_secrets(trained, monkeypatch):
+    from smog import publish
+    tmp, _ = trained
+    (tmp / ".env").write_text("FIRMS_MAP_KEY=secret-should-never-be-published\n")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    model.predict(now=NOW)
+    summary = publish.run()
+    assert "upload SKIPPED" in summary
+    out = tmp / "data/publish"
+    for name in ("predictions.csv", "city_daily.csv", "freshness.csv", "scorecard.csv", "published.json",
+                 "reports/MODEL_CARD.md", "reports/decision_metrics.json", "README.md"):
+        assert (out / name).exists(), name
+    everything = "".join(p.read_text(errors="ignore") for p in out.rglob("*") if p.is_file())
+    assert "secret-should-never-be-published" not in everything
+    (tmp / ".env").unlink()
+    import os
+    os.environ.pop("FIRMS_MAP_KEY", None)
+
+
+def test_scorecard_uses_the_evening_forecast():
+    from smog import publish
+    pred = pd.DataFrame({
+        "city_id": ["lahore"] * 3, "target_day_pkt": ["2026-10-21"] * 3,
+        # 10:05, 20:05 and 22:05 PKT on 20 Oct
+        "issued_utc": ["2026-10-20T05:05:00Z", "2026-10-20T15:05:00Z", "2026-10-20T17:05:00Z"],
+        "pm25_pred": [100.0, 120.0, 130.0], "pm25_p10": [80.0] * 3, "pm25_p90": [150.0] * 3,
+        "p_unhealthy": [0.9] * 3, "advisory_default": [True] * 3, "baseline_persistence": [90.0] * 3,
+        "row_id": ["a", "b", "c"]})
+    daily = pd.DataFrame({"city_id": ["lahore"], "day_pkt": ["2026-10-21"], "pm25_mean": [110.0],
+                          "hours_covered": [24], "complete": [True]})
+    s = publish.scorecard(pred, daily)
+    assert len(s) == 1 and s["row_id"].iloc[0] == "b"          # the 20:05 issue, not the later one
+    assert s["status"].iloc[0] == "final" and s["error"].iloc[0] == 10.0

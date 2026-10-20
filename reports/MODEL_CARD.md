@@ -1,6 +1,6 @@
 # Model card: next-day PM2.5 forecast
 
-*Generated automatically by `python -m smog train` on 2026-10-19T20:23:16+00:00. Do not edit numbers by hand.*
+*Generated automatically by `python -m smog train` on 2026-10-20T09:01:05+00:00. Do not edit numbers by hand.*
 
 ## What it does
 Predicts tomorrow's mean PM2.5 (µg/m³, Pakistan calendar day) for Lahore, Islamabad/Rawalpindi,
@@ -45,6 +45,24 @@ How the range was calibrated: the raw 10%/90% models were too confident (on the 
 5.66 µg/m³, an amount chosen **only from the validation months**
 (1458 city-days: coverage 59% → 80%),
 using conformalized quantile regression. The test set was not used to choose it.
+
+## From forecast to decision: "issue a smog advisory?"
+We turn the calibrated range into a **chance that tomorrow is unhealthy** (mean ≥ 55.5 µg/m³) and
+issue an advisory when that chance is at least 1/(1+R), where **R = how many times worse a missed unhealthy day
+is than an unnecessary advisory**. R is a policy choice made by the user, not fitted to data; our default is
+R = 3 (threshold 25%). Cost is counted as 1 per false alarm and R per miss.
+
+| period | rule | days | unhealthy days | hits | misses | false alarms | cost per 100 days |
+|---|---|---|---|---|---|---|---|
+| validation | Our rule: warn if P(unhealthy) ≥ 25% | 1458 | 632 | 614 | 18 | 183 | 16.3 |
+| validation | Warn if today is unhealthy (persistence) | 1458 | 632 | 558 | 74 | 69 | 20.0 |
+| validation | Warn if the forecast number ≥ 55.5 | 1458 | 632 | 559 | 73 | 65 | 19.5 |
+| test | Our rule: warn if P(unhealthy) ≥ 25% | 76 | 38 | 37 | 1 | 15 | 23.7 |
+| test | Warn if today is unhealthy (persistence) | 76 | 38 | 27 | 11 | 7 | 52.6 |
+| test | Warn if the forecast number ≥ 55.5 | 76 | 38 | 35 | 3 | 4 | 17.1 |
+
+Probability quality on the validation months: Brier score 0.0688 (skill vs always saying
+the base rate: 0.72; above 0 means the probabilities carry real information).
 
 ## Errors by city (test set)
 | city | days | model_mae | baseline_mae | improvement_pct | model_bias | interval_coverage |
