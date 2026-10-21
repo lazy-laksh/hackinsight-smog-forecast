@@ -70,8 +70,31 @@ python -m venv .venv
 pip install -r requirements.txt
 pip install -e .
 cp .env.example .env        # Windows: copy .env.example .env
-# put your keys in .env (never commit it): OPENAQ_API_KEY, FIRMS_MAP_KEY, HF_TOKEN, GROQ_API_KEY
+# put your keys in .env (never commit it): OPENAQ_API_KEY, FIRMS_MAP_KEY (both free); HF_TOKEN and
+# GROQ_API_KEY / GEMINI_API_KEY are only needed for publishing and the Insight Agent, not for `make data`
+python -m smog data         # or: make data
 ```
+
+## Reproducibility test (fresh clone, empty data folder)
+
+Done on 20–21 Oct 2026 on a Windows laptop (Python 3.14) that had never run the project: `git clone` into a new
+folder, the setup above, then `python -m smog data`.
+
+| Run | Result | Time |
+|---|---|---|
+| 1, from empty | OpenAQ 2,018 sensor-month files (2,086 API calls, 55 min) and NASA FIRMS 307 windows (5 min) downloaded; **stopped at Open-Meteo**: one answer came back "200 OK" with an empty body and crashed the stage | 61 min |
+| 2, after fix 1 | Open-Meteo 136 month files in 87 s, 0 failed; **stopped at verify**: the committed manifest lists 56 files from the original machine (hourly forecast snapshots) that can never be downloaded again | 7 min |
+| 3, after fix 2 | **all 8 stages OK**: 904,250 PM2.5 sensor-hours (1,552 flagged, 27,881 short gaps filled), 319,616 fire detections, 48,768 weather hours → 2,013 city-days; both quality gates passed | 6 min |
+
+So a stranger needs about **65 minutes** from an empty folder (almost all of it is waiting for the OpenAQ speed limit);
+cleaning, quality checks and gold take about 30 seconds. Fixes made because of this test:
+1. `src/smog/api.py`: a "200 OK" whose body is empty or not JSON is retried and, if it keeps failing, logged for that
+   one month instead of crashing the stage (tests in `tests/test_api.py`); Open-Meteo is asked at most once a second.
+2. `src/smog/manifest.py`: a file listed in the manifest but not on this machine is reported in
+   `data/logs/manifest_missing.csv`, not a failure; an edited or unrecorded file on disk still fails the check.
+
+Expected and logged, not errors: about a dozen OpenAQ sensor-months return HTTP 500/408 from OpenAQ's server
+(`data/logs/openaq_known_gaps.csv`). The exact row counts grow every hour because the data is live.
 
 ## Commands
 
