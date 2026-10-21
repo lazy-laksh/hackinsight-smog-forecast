@@ -103,7 +103,15 @@ class VerifyResult:
 
     @property
     def ok(self) -> bool:
-        return not (self.missing or self.changed or self.unlisted)
+        """Fails only when a file ON DISK is wrong: edited (changed) or of unknown origin (unlisted).
+
+        A listed file that is not on this machine (missing) is reported but does not fail the check:
+        the pipeline builds only from files on disk, and every one of those is checked. Missing files are
+        normal in a fresh clone: the committed manifest also lists files that can never be downloaded
+        again, such as the hourly weather-forecast snapshots saved on the original machine, and months
+        an API could not deliver on this run.
+        """
+        return not (self.changed or self.unlisted)
 
 
 def verify(manifest_path: Path | None = None, raw_dir: Path | None = None) -> VerifyResult:

@@ -26,16 +26,23 @@ def stage_prepare_folders() -> str:
 
 def stage_verify_raw() -> str:
     result = manifest.verify()
+    note = ""
+    if result.missing:   # reported and listed in a log, but not a failure (see manifest.VerifyResult.ok)
+        log = config.ROOT / "data/logs/manifest_missing.csv"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("file_path\n" + "\n".join(result.missing) + "\n", encoding="utf-8")
+        kinds = sorted({p.split("/")[2] if p.count("/") > 2 else p for p in result.missing})
+        note = (f"; {len(result.missing)} listed file(s) are not on this machine ({', '.join(kinds)}; "
+                f"e.g. forecast snapshots saved elsewhere), listed in data/logs/manifest_missing.csv")
     if not result.ok:
         lines = []
-        if result.missing:
-            lines.append(f"{len(result.missing)} file(s) in the manifest are missing on disk")
         if result.changed:
             lines.append(f"{len(result.changed)} file(s) do not match their SHA-256: {result.changed[:3]}")
         if result.unlisted:
             lines.append(f"{len(result.unlisted)} raw file(s) are not in the manifest: {result.unlisted[:3]}")
         raise RuntimeError("; ".join(lines))
-    return f"{result.checked} raw file(s) match their SHA-256 in manifest.csv"
+    present = result.checked - len(result.missing)
+    return f"{present} raw file(s) on disk match their SHA-256 in manifest.csv{note}"
 
 
 STAGES: list[tuple[str, Optional[Callable[[], str]]]] = [
