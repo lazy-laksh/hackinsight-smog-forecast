@@ -3,8 +3,9 @@
 It does three things for us:
 1. Waits between requests so we stay under the API's speed limit.
 2. If the API says "too many requests" (HTTP 429), it waits and tries again.
-3. If the server has a temporary problem (5xx or a dropped connection),
-   it retries a few times, waiting a bit longer each time.
+3. If the server has a temporary problem (5xx, a dropped connection, or a "200 OK"
+   whose body is empty or not valid JSON), it retries a few times, waiting a bit
+   longer each time, and then raises ApiError so the caller can log and move on.
 
 Some APIs (like NASA FIRMS) put the secret key inside the URL. Any value
 passed in `secrets` is replaced with *** in every URL and error message the
@@ -112,7 +113,20 @@ class ApiClient:
                 # Proactively pause if we have used up this period's allowance.
                 if str(resp.headers.get("x-ratelimit-remaining", "")) == "0":
                     self.sleep(self._reset_seconds(resp.headers))
-                return ApiResponse(full_url, resp.content, resp.json() if as_json else None)
+                if not as_json:
+                    return ApiResponse(full_url, resp.content, None)
+                try:
+                    return ApiResponse(full_url, resp.content, resp.json())
+                except ValueError:
+                    # "200 OK" but an empty or cut-off body (seen from Open-Meteo during a long run).
+                    # Treat it like a temporary server problem: wait and ask again; never save it.
+                    if attempt == retries:
+                        snippet = self.hide(resp.content[:80].decode("utf-8", "replace")) or "empty"
+                        raise ApiError(f"answer was not valid JSON for {full_url} (body: {snippet!r})",
+                                       status=resp.status_code) from None
+                    self.sleep(backoff)
+                    backoff *= 2
+                    continue
 
             if resp.status_code == 429:
                 wait = self._reset_seconds(resp.headers)

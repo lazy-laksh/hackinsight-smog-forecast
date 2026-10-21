@@ -41,7 +41,9 @@ AIR_VARS = ["pm2_5", "pm10", "dust", "aerosol_optical_depth", "carbon_monoxide",
 
 def make_clients() -> dict[str, ApiClient]:
     # Open-Meteo's free tier allows 600 calls a minute; we stay far below that.
-    return {name: ApiClient(url, min_interval_s=0.3)
+    # A month of hourly data counts as several calls in Open-Meteo's fair-use limit, and a fresh run asks for
+    # ~140 months at once; one request per second keeps a from-empty run well inside it (about 3 minutes).
+    return {name: ApiClient(url, min_interval_s=1.0)
             for name, url in (("archive", ARCHIVE_URL), ("forecast", FORECAST_URL), ("air", AIR_URL))}
 
 
