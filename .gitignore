@@ -29,3 +29,8 @@ Thumbs.db
 
 # Files exported for the dashboard (uploaded to Hugging Face, not committed)
 data/publish/
+
+# Personal preparation notes (kept on our laptops, not part of the submission)
+docs/VIVA_PREP.md
+docs/VIDEO_SCRIPT.md
+docs/DEVPOST.md

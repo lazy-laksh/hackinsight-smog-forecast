@@ -8,10 +8,11 @@ and Urdu. Team XYZ (see Team and responsibilities below).
 |---|---|
 | **Live dashboard (deployed, Hugging Face Space)** | https://huggingface.co/spaces/lazypanda21/smog-forecast-pakistan |
 | **Code (this repository, tag `v1.0-final`)** | https://github.com/lazy-laksh/hackinsight-smog-forecast |
-| **Demo video (≤ 3 min)** | VIDEO_LINK_HERE |
+| **Demo video (≤ 3 min)** | https://youtu.be/1tIjeWMbzng |
 | Insight Agent (deployed on Render, used by the dashboard's "Ask a question" tab) | open the dashboard → Ask a question |
 | Hourly published results (dataset) | https://huggingface.co/datasets/lazypanda21/smog-forecast-live |
 | One-page summary | [reports/Summary.pdf](reports/Summary.pdf) |
+| Dataset proposal (sources, credibility, how they are used) | [docs/DatasetProposal.pdf](docs/DatasetProposal.pdf) |
 | Prefect run history (24 h window, unedited) | [prefect_runs.csv](prefect_runs.csv) · [screenshot](docs/prefect_runs.png) |
 | Dataset declaration | [DATASET_DECLARATION.md](DATASET_DECLARATION.md) |
 | Model card (generated) | [reports/MODEL_CARD.md](reports/MODEL_CARD.md) |
