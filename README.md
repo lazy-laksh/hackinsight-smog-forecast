@@ -2,16 +2,42 @@
 
 Every evening, forecast **tomorrow's average PM2.5** for **Lahore, Islamabad/Rawalpindi, Peshawar and Karachi**,
 turn it into a **smog-advisory recommendation** an environment officer can act on, and explain it in English
-and Urdu. Team XYZ (solo: Laksh Kumar).
+and Urdu. Team XYZ (see Team and responsibilities below).
 
 | | Link |
 |---|---|
-| Live dashboard (Hugging Face Space) | https://huggingface.co/spaces/lazypanda21/smog-forecast-pakistan |
+| **Live dashboard (deployed, Hugging Face Space)** | https://huggingface.co/spaces/lazypanda21/smog-forecast-pakistan |
+| **Code (this repository, tag `v1.0-final`)** | https://github.com/lazy-laksh/hackinsight-smog-forecast |
+| **Demo video (≤ 3 min)** | VIDEO_LINK_HERE |
+| Insight Agent (deployed on Render, used by the dashboard's "Ask a question" tab) | open the dashboard → Ask a question |
 | Hourly published results (dataset) | https://huggingface.co/datasets/lazypanda21/smog-forecast-live |
+| One-page summary | [reports/Summary.pdf](reports/Summary.pdf) |
+| Prefect run history (24 h window, unedited) | [prefect_runs.csv](prefect_runs.csv) · [screenshot](docs/prefect_runs.png) |
 | Dataset declaration | [DATASET_DECLARATION.md](DATASET_DECLARATION.md) |
 | Model card (generated) | [reports/MODEL_CARD.md](reports/MODEL_CARD.md) |
 | AI use log / optimisation log | [AI_Use_Log.md](AI_Use_Log.md) · [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) |
 | Business model | [docs/BUSINESS_MODEL.md](docs/BUSINESS_MODEL.md) |
+
+## Team and responsibilities
+
+**Team XYZ**: four members. Laksh Kumar built the system; the other three members joined on 21 Oct 2026 and present and defend the parts listed below.
+
+| Member | Role | Responsibilities |
+|---|---|---|
+| Laksh Kumar (BS Computer Science, Data Science, NED University of Engineering & Technology, Karachi) | Team lead and developer | Problem choice and user research; dataset declaration (baseline, metric, test period); data pipeline (OpenAQ, NASA FIRMS, Open-Meteo/CAMS; raw → cleaned → gold; SHA-256 manifest); Data Quality Agent; forecast model, validation and calibration; decision layer; Prefect hourly automation on a dedicated laptop; dashboard and deployment (Hugging Face); Insight Agent and its deployment (Render); drift monitor and Punjab EPA validation; tests and reproducibility test; documentation, AI use log, optimization log, demo video; presents data, pipeline, quality and automation |
+| Syed Mustehsan Akhtar Kazmi | Problem and impact | Presents and answers questions on the problem, the user, the live dashboard, the business model and Pakistan impact |
+| Noor Fatima | Model and results | Presents and answers questions on the model, baseline, results by city, uncertainty, the advisory rule and limitations |
+| Amna Iqbal | Agent and responsible AI | Presents and answers questions on the Insight Agent and its guardrails, the drift monitor and the Punjab EPA validation |
+
+AI assistance (Claude) was used for code and documents; every use, and what was checked, is in [AI_Use_Log.md](AI_Use_Log.md).
+
+## Project details in brief
+
+* **Problem:** smog decisions in Punjab and KP (schools, hospitals, traffic) must be made the evening before, but only today's reading is usually available.
+* **User and decision:** a district environment officer decides at 20:00 whether to issue a smog advisory for tomorrow.
+* **What we deliver:** tomorrow's mean PM2.5 for Lahore, Islamabad/Rawalpindi, Peshawar and Karachi with a calibrated 80% range, the chance of an unhealthy day (≥ 55.5 µg/m³), an advisory recommendation at the officer's own risk threshold, the main reasons, and an Urdu message; updated every hour.
+* **Result:** 17.7% lower error than the declared baseline "tomorrow = today" on the locked October 2026 test month (80 city-days); 80% range held the real value 91% of the time; the advisory rule caught 39 of 40 unhealthy test days. Lahore (8.7%) is below our declared 10% target and Karachi does not beat the baseline; both are reported in the model card.
+* **Deployed:** live dashboard (Hugging Face Space), hourly pipeline (Prefect, 24/24 runs in the judged window), Insight Agent with cited answers (Render).
 
 ## How it works
 

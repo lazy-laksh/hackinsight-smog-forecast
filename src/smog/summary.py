@@ -90,9 +90,9 @@ def build() -> str:
                  f"(ratio {ok['ratio'].mean():.2f}).")
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Summary - Next-day smog forecast for Pakistan</title>
 <style>
-@page {{ size: A4; margin: 12mm 13mm; }}
-body {{ font: 9.6pt/1.36 "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; }}
-h1 {{ font-size: 15pt; margin: 0 0 2px; }} h2 {{ font-size: 10.5pt; margin: 7px 0 2px; color: #0e7490; }}
+@page {{ size: A4; margin: 9mm 11mm; }}
+body {{ font: 9.1pt/1.3 "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; }}
+h1 {{ font-size: 15pt; margin: 0 0 2px; }} h2 {{ font-size: 10.5pt; margin: 5px 0 1px; color: #0e7490; }}
 p, ul {{ margin: 2px 0; }} ul {{ padding-left: 16px; }} li {{ margin: 1px 0; }}
 .cols {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 8.8pt; margin-top: 2px; }}
@@ -101,7 +101,7 @@ th, td {{ border-bottom: 1px solid #ddd; padding: 1.5px 4px; text-align: left; }
 .kpi b {{ font-size: 13pt; display: block; }} .muted {{ color: #555; font-size: 8.4pt; }}
 </style></head><body>
 <h1>Next-day smog forecast and advisory for Pakistan</h1>
-<p class="muted">HackInsight 2026 (Data-to-Decision) · Team XYZ (Laksh Kumar) · Dashboard: {SPACE} · Code: {REPO}</p>
+<p class="muted">HackInsight 2026 (Data-to-Decision) · Team XYZ (Laksh Kumar, Syed Mustehsan Akhtar Kazmi, Noor Fatima, Amna Iqbal) · Dashboard: {SPACE} · Code: {REPO}</p>
 <div class="kpi">
  <div><b>{t['improvement_vs_baseline_pct']}%</b>lower error than persistence (test month, {m['test_rows']} city-days)</div>
  <div><b>{t['interval_80_coverage']:.0%}</b>of real values inside the calibrated 80% range</div>
