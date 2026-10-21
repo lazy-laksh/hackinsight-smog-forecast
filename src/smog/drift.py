@@ -24,7 +24,7 @@ import pandas as pd
 from smog import config
 
 RECENT_DAYS = 14
-REFERENCE_HALF_WIDTH = 21          # same calendar date one year ago, +-21 days
+REFERENCE_PADDING = 7              # the recent 14 days moved back one year, plus 7 days on each side (28 days)
 MIN_VALUES = 20
 FEATURES = [  # (table, column, label)
     ("city_daily", "pm25_mean", "PM2.5 daily mean"),
@@ -60,8 +60,9 @@ def psi_status(value: float) -> str:
 
 def windows(today: date) -> dict:
     recent = (today - timedelta(days=RECENT_DAYS), today - timedelta(days=1))
-    centre = today - timedelta(days=365)
-    reference = (centre - timedelta(days=REFERENCE_HALF_WIDTH), centre + timedelta(days=REFERENCE_HALF_WIDTH))
+    # Exactly the same calendar weeks one year earlier (smog builds up fast in Oct-Nov, so the windows must line up),
+    # padded by a week each side so there are enough values to compare.
+    reference = (recent[0] - timedelta(days=365 + REFERENCE_PADDING), recent[1] - timedelta(days=365 - REFERENCE_PADDING))
     return {"recent": recent, "reference": reference}
 
 

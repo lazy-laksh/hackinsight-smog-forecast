@@ -77,6 +77,15 @@ still beats the baseline. What we would do next: more Lahore-specific inputs (fi
 inversion strength) and calibrating our low-cost sensors against Punjab EPA stations; our spot check showed our
 Lahore value is about 10 µg/m³ (11%) below the EPA station mean, which matches the model's negative Lahore bias.
 
+**14c. Your model card shows Lahore 52% WORSE than persistence in the smog season. Explain.**
+That table is the rolling-origin validation on last winter (Oct 2025 to Feb 2026). Our data starts in June 2025, so when
+the model predicted November 2025 it had only been trained on June to October: it had never seen a 300 µg/m³ day.
+Tree models cannot predict above the highest value they were trained on, while "same as today" follows any level.
+The final model is trained on data that includes last winter's peaks, so this November it has seen such values.
+Still, deep-winter Lahore is our biggest risk, so: (1) the advisory rule uses the chance of exceeding 55.5, which stays
+correct even when the exact number is too low (validation caught 614 of 632 unhealthy days), (2) the drift monitor
+compares live error with test error every hour, and (3) the dashboard always shows "same as today" next to our forecast.
+
 **15. Why might live errors be bigger than test errors?**
 In training, "tomorrow's weather" came from archives that are closer to the truth than a real forecast. The model card
 also shows a strict model without any "tomorrow" inputs as a pessimistic check.
@@ -158,7 +167,11 @@ Every hourly run compares the last 14 days of inputs (PM2.5, wind, mixing height
 last year, which the model learned from, using PSI; and compares our live error on finished days with the test-month
 error. Same weeks last year, not last month, because smog is seasonal: October always looks different from September.
 PSI is noisy with only 56 values, so we subtract its expected noise before applying the usual 0.10 / 0.25 limits.
-The dashboard shows ok / watch / drift, and every check is logged in `data/logs/drift_log.csv`. (*) read today's status.
+The dashboard shows ok / watch / drift, and every check is logged in `data/logs/drift_log.csv`.
+On 21 Oct it says **drift**: this October is more humid (about 71% vs 59%), has far fewer fires within 300 km and is
+cleaner than the same weeks of 2025. That is a real change, not a bug, and it is exactly what the check is for. The
+locked test month IS this drifted period, and the model was still 17.7% better than persistence there, which is why we
+check accuracy as well as inputs. (*) Read the numbers from the dashboard on the day.
 
 **29c. Did you validate against Pakistani official data?**
 Yes, as a spot check: Punjab EPA's own government stations in Lahore publish hourly PM2.5 on aqi.punjab.gov.pk.

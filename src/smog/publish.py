@@ -76,7 +76,7 @@ def scorecard(pred: pd.DataFrame, daily: pd.DataFrame) -> pd.DataFrame:
 def drift_report(score: pd.DataFrame | None, now: datetime) -> dict:
     """Drift check on the full history in the warehouse (the published files only keep 120 days)."""
     from smog import drift
-    since = now.date() - timedelta(days=365 + drift.REFERENCE_HALF_WIDTH + 2)
+    since = now.date() - timedelta(days=365 + drift.RECENT_DAYS + drift.REFERENCE_PADDING + 2)
     with warehouse.connect(read_only=True) as con:
         tables = {t: _query(con, f"SELECT * FROM gold.{t} WHERE day_pkt >= ?", since)
                   for t in ("city_daily", "weather_daily", "fires_daily")}

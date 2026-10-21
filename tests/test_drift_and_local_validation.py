@@ -34,9 +34,9 @@ def test_small_samples_of_the_same_distribution_are_not_called_drift():
 
 
 def test_reference_is_the_same_weeks_last_year():
-    w = drift.windows(date(2026, 10, 20))
-    assert w["recent"] == (date(2026, 10, 6), date(2026, 10, 19))
-    assert w["reference"][0] < date(2025, 10, 20) < w["reference"][1]
+    w = drift.windows(date(2026, 10, 21))
+    assert w["recent"] == (date(2026, 10, 7), date(2026, 10, 20))
+    assert w["reference"] == (date(2025, 9, 30), date(2025, 10, 27))     # same weeks, +-7 days; no November
 
 
 def _daily(start, days, value, complete=True):
