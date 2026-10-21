@@ -60,12 +60,22 @@ declared it before building anything.
 
 **13. How did you test honestly?**
 Target days from 1 October 2026 were locked away and used once. Settings were chosen by rolling-origin validation: train
-on months before, predict the next month, repeat. (*) Result: our error is about 19% lower than persistence overall,
-and the declared targets (≥10% overall and in Lahore) were met.
+on months before, predict the next month, repeat. Final result (Dell, 21 Oct, 80 city-days from 1 to 20 October):
+MAE 8.94 against 10.86 for persistence, **17.7% better overall**, so the overall target (≥10%) is met. The Lahore target
+(≥10%) is **not** met: Lahore is 8.7% better. The model card says "Lahore NOT met" automatically; we did not hide it.
 
 **14. Where is the model weak?**
-Karachi: its October air is clean and steady, so "same as today" is hard to beat; our model is slightly worse there (*).
-We report it instead of hiding it. Lahore forecasts run a few µg/m³ low on average (bias in the model card).
+By city: Islamabad/Rawalpindi +39.5%, Peshawar +20.4%, Lahore +8.7%, Karachi **−17.6%**.
+Karachi: its October air is clean and steady (error only 4–5 µg/m³ for both), so "same as today" is hard to beat; our
+model is worse there. Lahore: it beats persistence but by less than the 10% we declared, and it runs 2.2 µg/m³ low on
+average (bias). We report both instead of hiding them.
+
+**14b. You missed your own Lahore target. Why didn't you fix it?**
+Because the only way to "fix" it now would be to change the model after looking at the test month, which is exactly
+the cheating the locked test set exists to prevent. With 20 Lahore test days, 8.7% vs 10% is within noise, and it
+still beats the baseline. What we would do next: more Lahore-specific inputs (fires upwind of Lahore, night-time
+inversion strength) and calibrating our low-cost sensors against Punjab EPA stations; our spot check showed our
+Lahore value is about 10 µg/m³ (11%) below the EPA station mean, which matches the model's negative Lahore bias.
 
 **15. Why might live errors be bigger than test errors?**
 In training, "tomorrow's weather" came from archives that are closer to the truth than a real forecast. The model card
@@ -73,9 +83,9 @@ also shows a strict model without any "tomorrow" inputs as a pessimistic check.
 
 ## Uncertainty and decision
 **16. How do you show uncertainty?**
-Two extra models predict the 10% and 90% values (an 80% range). They were too narrow (64%), so we widened them by an
-amount chosen on validation months only (conformalized quantile regression). Now about 80% on validation, 91% (*) on the
-test month: slightly cautious.
+Two extra models predict the 10% and 90% values (an 80% range). They were too narrow (66%), so we widened them by an
+amount chosen on validation months only (conformalized quantile regression). Now about 80% on validation, 91% on the
+test month (by city 90–95%): slightly cautious.
 
 **17. How do you turn the range into a decision?**
 We read the chance that tomorrow's mean is ≥ 55.5 µg/m³ (US EPA "Unhealthy"). Advise when the chance ≥ 1/(1+R), where R

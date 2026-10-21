@@ -1,0 +1,12 @@
+{
+  "evaluated_utc": "2026-10-21T08:42:06+00:00",
+  "prompt_version": "2026-10-20.4",
+  "questions": 22,
+  "passed": 22,
+  "answer_accuracy": 1.0,
+  "correct_refusals": 1.0,
+  "faithful_answers": 1.0,
+  "models_used": {
+    "groq:openai/gpt-oss-120b": 22
+  }
+}
