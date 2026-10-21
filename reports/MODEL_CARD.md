@@ -1,6 +1,6 @@
 # Model card: next-day PM2.5 forecast
 
-*Generated automatically by `python -m smog train` on 2026-10-20T09:01:05+00:00. Do not edit numbers by hand.*
+*Generated automatically by `python -m smog train` on 2026-10-21T08:21:22+00:00. Do not edit numbers by hand.*
 
 ## What it does
 Predicts tomorrow's mean PM2.5 (µg/m³, Pakistan calendar day) for Lahore, Islamabad/Rawalpindi,
@@ -18,30 +18,30 @@ quantile models (10% and 90%) for an 80% range. Settings chosen by rolling-origi
 Random seed 42.
 
 Training target days: 2025-06-02 to 2026-09-30 (1922 city-days).
-**Test target days: 2026-10-01 to 2026-10-19 (76 city-days), never used for tuning.**
+**Test target days: 2026-10-01 to 2026-10-20 (80 city-days), never used for tuning.**
 
 ## Results on the test set
 | | MAE (µg/m³) | RMSE | bias |
 |---|---|---|---|
-| Our model | 8.9 | 11.39 | 0.18 |
-| Our model without any "tomorrow" inputs (strict check) | 10.18 | 13.31 | 1.77 |
-| Declared baseline: persistence (today so far at 20:00) | 10.9 | 15.04 | -3.49 |
-| Harder baseline: persistence using all of today | 9.8 | 13.17 | -1.13 |
+| Our model | 8.94 | 11.36 | 0.22 |
+| Our model without any "tomorrow" inputs (strict check) | 10.05 | 13.13 | 1.63 |
+| Declared baseline: persistence (today so far at 20:00) | 10.86 | 14.88 | -3.64 |
+| Harder baseline: persistence using all of today | 9.43 | 12.84 | -1.21 |
 
-Improvement over the declared baseline: **18.3%** (vs the harder baseline: 9.2%;
-strict model without "tomorrow" inputs: 6.6%).
-Declared success rule (at least 10% lower MAE than persistence, overall and for Lahore): overall **met**, Lahore **met**.
+Improvement over the declared baseline: **17.7%** (vs the harder baseline: 5.2%;
+strict model without "tomorrow" inputs: 7.5%).
+Declared success rule (at least 10% lower MAE than persistence, overall and for Lahore): overall **met**, Lahore **NOT met**.
 
-Unhealthy days (≥ 55.5 µg/m³): model recall 0.921,
-precision 0.897; baseline recall 0.711,
-precision 0.794 (38 unhealthy test days).
+Unhealthy days (≥ 55.5 µg/m³): model recall 0.925,
+precision 0.881; baseline recall 0.725,
+precision 0.806 (40 unhealthy test days).
 
 **Uncertainty:** the 80% range contained the real value 91% of the time
-(ideal: about 80%); average width 36.9 µg/m³. For the officer this means: plan for the
+(ideal: about 80%); average width 37.3 µg/m³. For the officer this means: plan for the
 upper end of the range when deciding on an advisory.
 
 How the range was calibrated: the raw 10%/90% models were too confident (on the test set they held only
-64% of real values, width 25.6 µg/m³). We widened both ends by
+66% of real values, width 25.9 µg/m³). We widened both ends by
 5.66 µg/m³, an amount chosen **only from the validation months**
 (1458 city-days: coverage 59% → 80%),
 using conformalized quantile regression. The test set was not used to choose it.
@@ -57,9 +57,9 @@ R = 3 (threshold 25%). Cost is counted as 1 per false alarm and R per miss.
 | validation | Our rule: warn if P(unhealthy) ≥ 25% | 1458 | 632 | 614 | 18 | 183 | 16.3 |
 | validation | Warn if today is unhealthy (persistence) | 1458 | 632 | 558 | 74 | 69 | 20.0 |
 | validation | Warn if the forecast number ≥ 55.5 | 1458 | 632 | 559 | 73 | 65 | 19.5 |
-| test | Our rule: warn if P(unhealthy) ≥ 25% | 76 | 38 | 37 | 1 | 15 | 23.7 |
-| test | Warn if today is unhealthy (persistence) | 76 | 38 | 27 | 11 | 7 | 52.6 |
-| test | Warn if the forecast number ≥ 55.5 | 76 | 38 | 35 | 3 | 4 | 17.1 |
+| test | Our rule: warn if P(unhealthy) ≥ 25% | 80 | 40 | 39 | 1 | 17 | 25.0 |
+| test | Warn if today is unhealthy (persistence) | 80 | 40 | 29 | 11 | 7 | 50.0 |
+| test | Warn if the forecast number ≥ 55.5 | 80 | 40 | 37 | 3 | 5 | 17.5 |
 
 Probability quality on the validation months: Brier score 0.0688 (skill vs always saying
 the base rate: 0.72; above 0 means the probabilities carry real information).
@@ -67,12 +67,12 @@ the base rate: 0.72; above 0 means the probabilities carry real information).
 ## Errors by city (test set)
 | city | days | model_mae | baseline_mae | improvement_pct | model_bias | interval_coverage |
 |---|---|---|---|---|---|---|
-| islamabad_rawalpindi | 19 | 6.53 | 10.7 | 39.0 | -0.15 | 0.89 |
-| karachi | 19 | 4.45 | 4.16 | -7.0 | 0.32 | 0.89 |
-| lahore | 19 | 12.52 | 14.56 | 14.0 | -2.97 | 0.89 |
-| peshawar | 19 | 12.1 | 14.19 | 14.7 | 3.51 | 0.95 |
+| islamabad_rawalpindi | 20 | 6.37 | 10.53 | 39.5 | -0.31 | 0.9 |
+| karachi | 20 | 4.87 | 4.14 | -17.6 | 0.94 | 0.9 |
+| lahore | 20 | 12.74 | 13.95 | 8.7 | -2.17 | 0.9 |
+| peshawar | 20 | 11.8 | 14.82 | 20.4 | 2.4 | 0.95 |
 
-Weakest city on the test set: **lahore** (MAE 12.52). Users there should treat the
+Weakest city on the test set: **lahore** (MAE 12.74). Users there should treat the
 forecast as a rough guide and also check the official Punjab EPA / provincial readings.
 
 ## Errors by city and season (rolling-origin validation, before the test period)
