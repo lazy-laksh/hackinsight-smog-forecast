@@ -24,9 +24,9 @@ th, td { border-bottom: 1px solid #ddd; padding: 1.5px 4px; text-align: left; }
 readiness) are made too late. A district environment officer needs, <b>at 20:00</b>, tomorrow's PM2.5 and a clear
 recommendation. We forecast tomorrow's mean PM2.5 for Lahore, Islamabad/Rawalpindi, Peshawar and Karachi.</p>
 <h2>Data and pipeline</h2>
-<ul><li>OpenAQ sensors (202 sensors, 905,172 hourly readings since June 2025),
+<ul><li>OpenAQ sensors (202 sensors, 905,340 hourly readings since June 2025),
 NASA FIRMS fires (285,691 detections), Open-Meteo weather and CAMS.</li>
-<li>2,809 raw files, each with a SHA-256 fingerprint in <code>data/manifest.csv</code>, re-verified every run.</li>
+<li>2,817 raw files, each with a SHA-256 fingerprint in <code>data/manifest.csv</code>, re-verified every run.</li>
 <li>Prefect flow every hour: fetch → verify → clean → Data Quality Agent (gate 1 schema, gate 2 freshness and
 completeness) → gold → forecast → publish. A failed gate stops the run; every quality decision is logged
 (1,552 sensor-hours flagged: stuck, spikes, zeros, impossible values).</li></ul>
