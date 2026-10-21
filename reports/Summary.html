@@ -16,7 +16,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 1.5px 4px; text-align: left; }
  <div><b>17.7%</b>lower error than persistence (test month, 80 city-days)</div>
  <div><b>91%</b>of real values inside the calibrated 80% range</div>
  <div><b>24/7</b>hourly pipeline, quality gates, public run history</div>
- <div><b>–</b>golden questions passed by the cited Insight Agent</div>
+ <div><b>22/22</b>golden questions passed by the cited Insight Agent</div>
 </div>
 <div class="cols"><div>
 <h2>Problem and user</h2>
@@ -53,7 +53,7 @@ main reasons (smog already in the air, weather, fires, season) and an Urdu advis
 school instructions 2026) and from data facts built by code from gold rows. An LLM (Groq gpt-oss, Gemini fallback)
 answers; our code then checks every citation id and every number against the sources, retries once, and otherwise
 answers <i>"I don't know based on my sources."</i> Personal details are removed before the model sees a question;
-health questions always get a "call Rescue 1122" note. English and Urdu. Golden set: – passed.</p>
+health questions always get a "call Rescue 1122" note. English and Urdu. Golden set: 22/22 passed.</p>
 <h2>Dashboard and operations</h2>
 <p>Free static Hugging Face Space reading the hourly published dataset: last successful run, data freshness,
 quality gates, forecasts, live "were we right?" report card, drift monitor (inputs vs the same weeks last year,
