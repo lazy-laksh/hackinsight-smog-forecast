@@ -70,6 +70,15 @@ def build() -> str:
     losers = [CITY.get(c, c) for c in by_city.loc[by_city["improvement_pct"] < 0, "city"]] if by_city is not None else []
     weak = (f"{', '.join(losers)} {'does' if len(losers) == 1 else 'do'} not beat persistence on the test month"
             if losers else "every city beats persistence on the test month")
+    seasons = _load("validation_errors_by_city_and_season.csv")
+    if seasons is not None and {"season", "improvement_pct"} <= set(seasons.columns):
+        bad = seasons[seasons["season"].astype(str).str.startswith("smog") & (seasons["improvement_pct"] < 0)]
+        if len(bad):
+            worst = bad.sort_values("improvement_pct").iloc[0]
+            weak += (f"; in last winter's smog season (validation) the model was worse than persistence in "
+                     f"{', '.join(CITY.get(c, c) for c in bad['city'])} (worst: {CITY.get(worst['city'], worst['city'])} "
+                     f"{worst['improvement_pct']:+.0f}%), because the data starts in June 2025 and trees cannot predict "
+                     f"above levels they have not seen; the final model has now seen last winter")
     success = m["declared_success"]
     lv = _load("local_validation.csv")
     local = ""
