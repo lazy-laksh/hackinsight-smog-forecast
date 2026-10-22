@@ -1,0 +1,88 @@
+# Runs the same hourly pipeline as the laptop (fetch -> verify -> clean -> quality -> gold -> forecast -> publish),
+# but on a free GitHub machine, so no laptop has to stay on.
+# The pipeline's memory (raw files, manifest, model, logs, forecast history) lives in a PRIVATE Hugging Face
+# dataset: loaded before the run and saved after it by scripts/cloud_state.py.
+#
+# Secrets (repo Settings -> Secrets and variables -> Actions -> New repository secret):
+#   OPENAQ_API_KEY, FIRMS_MAP_KEY, HF_TOKEN (write)         required
+#   PREFECT_API_URL, PREFECT_API_KEY                         optional: show runs in Prefect Cloud (free Hobby plan)
+# Optional variable: HF_STATE_REPO (default: <your HF user>/smog-forecast-state)
+
+name: Hourly smog pipeline
+
+on:
+  schedule:
+    - cron: "5 * * * *"         # 5 minutes past every hour (UTC). GitHub may start it a few minutes late.
+  workflow_dispatch:             # "Run workflow" button for a manual run
+
+concurrency:                     # never two runs at once (like limit=1 on the laptop)
+  group: smog-hourly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  hourly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      OPENAQ_API_KEY: ${{ secrets.OPENAQ_API_KEY }}
+      FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_STATE_REPO: ${{ vars.HF_STATE_REPO }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # set this to the Dell's Python (major.minor), see `python --version`
+          cache: pip
+
+      - name: Install the project
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Connect Prefect Cloud (only if the secrets exist)
+        env:
+          URL: ${{ secrets.PREFECT_API_URL }}
+          KEY: ${{ secrets.PREFECT_API_KEY }}
+        run: |
+          if [ -n "$URL" ] && [ -n "$KEY" ]; then
+            echo "PREFECT_API_URL=$URL" >> "$GITHUB_ENV"
+            echo "PREFECT_API_KEY=$KEY" >> "$GITHUB_ENV"
+            echo "Runs will appear in Prefect Cloud."
+          else
+            echo "No Prefect Cloud secrets: Prefect runs locally on this machine; see the logs here."
+          fi
+
+      - name: Reuse yesterday's download (speed only; Hugging Face is the real store)
+        id: day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/raw
+            .cache/huggingface
+          key: smog-state-${{ steps.day.outputs.day }}
+          restore-keys: smog-state-
+
+      - name: Load the pipeline's memory from Hugging Face
+        id: pull
+        run: python scripts/cloud_state.py pull
+
+      - name: Use the library versions the model was trained with
+        run: |
+          if [ -f data/state/versions.txt ]; then pip install -r data/state/versions.txt; fi
+
+      - name: Run the hourly Prefect flow
+        run: python -c "from smog.flow import hourly; hourly()"
+
+      - name: Save what changed back to Hugging Face
+        if: always() && steps.pull.outcome == 'success'
+        run: |
+          # Once a week (Sunday 00:xx UTC) keep only the latest version of each file, so storage stays small.
+          if [ "$(date -u +%u%H)" = "700" ]; then export SQUASH_HISTORY=1; fi
+          python scripts/cloud_state.py push

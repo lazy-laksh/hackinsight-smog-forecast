@@ -34,3 +34,8 @@ data/publish/
 docs/VIVA_PREP.md
 docs/VIDEO_SCRIPT.md
 docs/DEVPOST.md
+
+# Cloud run (scripts/cloud_state.py): forecast history export and download bookkeeping
+data/state/
+data/.pulled.json
+.cache/

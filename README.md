@@ -83,6 +83,13 @@ Open-Meteo + CAMS┘     (never edited)   (verified every run)          (gate 1 
   free plan from `render.yaml` (keys stored as Render secrets). The dashboard calls it at `AGENT_URL`. Free instances
   sleep after 15 minutes idle, so the first question can take about a minute. Language models are tried in the order in
   `config/agent.yaml` (Groq gpt-oss-120b, Google Gemini Flash, Groq gpt-oss-20b); the same checks apply to every answer.
+* **Hourly pipeline (after the hackathon):** during the judged window it ran on a dedicated laptop with Prefect
+  (`make schedule`). Since 22 Oct 2026 it can run on GitHub Actions instead (`.github/workflows/hourly.yml`), with
+  no laptop: each run loads the pipeline's memory (raw files, manifest, model, logs, forecast history) from a
+  private Hugging Face dataset, runs the same Prefect flow, and saves back only what changed
+  (`scripts/cloud_state.py`). Setup: run `python scripts/cloud_state.py push --all` once on the computer that has
+  the data, then add the `OPENAQ_API_KEY`, `FIRMS_MAP_KEY` and `HF_TOKEN` repository secrets. The judged
+  submission is the `v1.0-final` tag, which does not include this.
 
 ## Results
 
