@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"   # set this to the Dell's Python (major.minor), see `python --version`
+          python-version: "3.14"   # set this to the Dell's Python (major.minor), see `python --version`
           cache: pip
 
       - name: Install the project
